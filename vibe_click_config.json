@@ -1,0 +1,85 @@
+{
+    "click_x": 1147,
+    "click_y": 931,
+    "interval": 1.0,
+    "click_type": "left",
+    "action_chain": [
+        {
+            "name": "Шаг 7",
+            "x": 1138,
+            "y": 1406,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 9",
+            "x": 1013,
+            "y": 1402,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 10",
+            "x": 2418,
+            "y": 36,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 11",
+            "x": 1684,
+            "y": 1411,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 12",
+            "x": 12,
+            "y": 180,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 13",
+            "x": 30,
+            "y": 202,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 14",
+            "x": 50,
+            "y": 222,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 15",
+            "x": 1433,
+            "y": 1420,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 16",
+            "x": 1630,
+            "y": 1407,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 17",
+            "x": 2247,
+            "y": 29,
+            "action_type": "Клик левой",
+            "button": "left"
+        },
+        {
+            "name": "Шаг 18",
+            "x": 647,
+            "y": 1421,
+            "action_type": "Клик левой",
+            "button": "left"
+        }
+    ]
+}
