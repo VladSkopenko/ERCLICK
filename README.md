@@ -1,89 +1,229 @@
-# 🖱️ Vibe Click - Автокликер
+# 🎯 FlowClick Studio
 
-Простая и удобная программа для автоматических кликов мышью с возможностью выбора позиции для клика.
+**Visual BPMN-style automation tool for mouse clicks and keyboard input**
 
-## ✨ Возможности
+FlowClick Studio is a powerful visual flow editor that allows you to create automated click sequences and keyboard inputs using a drag-and-drop interface inspired by BPMN (Business Process Model and Notation).
 
-- 🎯 Выбор точной позиции для клика на экране
-- ⚙️ Настройка интервала между кликами (от 0.1 до 10 секунд)
-- 🖱️ Поддержка левой, правой и средней кнопки мыши
-- ⌨️ Горячая клавиша F6 для старта/остановки
-- 🛡️ Экстренная остановка при перемещении курсора в угол экрана
-- 💻 Современный и понятный интерфейс
+![FlowClick Studio Interface](Безымянный.png)
 
-## 📋 Требования
+![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)
 
-- Python 3.7 или выше
-- Windows (может работать на Linux/macOS с небольшими изменениями)
+## ✨ Features
 
-## 🚀 Установка
+### 🔷 Block Types
 
-1. Клонируйте или скачайте репозиторий
+- **📍 Coordinate Block** (Square) - Define screen coordinates
+- **👆 Click Blocks** (Triangles) - Left, Right, Middle mouse clicks
+- **⌨️ Keyboard Input** (Diamond) - Type text with Enter support
+- **⏱️ Delay Block** (Green Circle) - Add pauses between actions
+- **🔄 Repeat Block** (Blue Circle) - Loop actions N times
+- **▶ Group Blocks** (Dashed Rectangles) - Organize flows into subprocesses
 
-2. Установите зависимости:
+### 🎨 Visual Features
+
+- **Drag & Drop** - Move blocks around the canvas
+- **Connections** - Link blocks with arrows
+- **Delay on Arrows** - Set timing between transitions (double-click arrow)
+- **Grid Layout** - Organized workspace
+- **Real-time Execution** - See your flow run live
+
+### ⌨️ Keyboard Shortcuts
+
+- **Ctrl** - Capture coordinates for selected coordinate block
+- **F6** - Start/Stop execution
+- **Q** - Emergency stop
+- **Double-click** - Edit block parameters or arrow delays
+- **Right-click** - Delete block
+
+### 🚀 Quick Start
+
+1. Add blocks from the toolbar
+2. Drag blocks to position them
+3. Click "🔗 Connect" and link blocks (click first, then second)
+4. Double-click coordinate blocks to capture screen positions (or select + press Ctrl)
+5. Double-click arrows to set delays between actions
+6. Press "▶ Start" or **F6** to run your automation
+
+### 📋 Example Flows
+
+**Simple Click Automation:**
+```
+Coordinate (100, 200) → Left Click → [2s delay] → Coordinate (300, 400) → Left Click
+```
+
+**Form Fill with Repeat:**
+```
+Repeat 5x → Start Group
+  → Coordinate → Click → Keyboard Input "Name"
+  → Coordinate → Click → Keyboard Input "Email"
+End Group
+```
+
+**Complex Automation:**
+```
+Start Group "Login Process"
+  → Coordinate (login field) → Click
+  → Keyboard Input "username" → [0.5s]
+  → Coordinate (password field) → Click
+  → Keyboard Input "password" → [0.5s]
+  → Coordinate (submit button) → Click
+End Group → [2s] → Repeat 3x → (next action)
+```
+
+## 📦 Installation
+
+### Requirements
+
+```bash
+Python 3.8+
+```
+
+### Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-## 💡 Использование
+### Dependencies List
 
-1. Запустите программу:
+- `pyautogui` - Mouse and keyboard automation
+- `pillow` - Image processing
+- `keyboard` - Hotkey support
+- `pynput` - Input monitoring
+- `pyperclip` - Clipboard operations
+
+## 🎮 Usage
+
+### Running the Application
+
 ```bash
 python main.py
 ```
 
-2. Нажмите кнопку **"Выбрать позицию для клика"**
+### Creating Your First Flow
 
-3. Через 3 секунды наведите курсор на элемент, по которому нужно кликать
+1. **Add a Coordinate Block** - Click "📍 Координата"
+2. **Select it** (left-click on the block)
+3. **Capture coordinates** - Move your mouse where you want to click, press **Ctrl**
+4. **Add a Click Block** - Click "👆 Левый клик"
+5. **Connect them** - Click "🔗 Соединить", click coordinate block, then click block
+6. **Run** - Press **F6** or click "▶ Запустить"
 
-4. Настройте параметры:
-   - **Интервал** - время между кликами в секундах
-   - **Кнопка мыши** - левая, правая или средняя кнопка
+### Setting Delays
 
-5. Нажмите **"Старт (F6)"** или клавишу F6 для начала автокликов
+**On Connections:**
+- Double-click any arrow between blocks
+- Enter delay in seconds (e.g., 1.5)
+- Orange circle with time will appear on the arrow
 
-6. Для остановки нажмите **"Стоп (F6)"** или клавишу F6
+**Using Delay Blocks:**
+- Add "⏱️ Задержка (сек)" block
+- Set duration when adding or double-click to edit
+- Place in your flow where pause is needed
 
-## ⚠️ Важно
+### Batch Coordinate Setup
 
-- **Экстренная остановка**: переместите курсор в верхний левый угол экрана для немедленной остановки кликов
-- Используйте программу ответственно и в соответствии с правилами используемых приложений
-- Программа может быть заблокирована антивирусом - добавьте её в исключения если нужно
+Use "🎯 Задать все координаты" to set multiple coordinates quickly:
+1. Click the button
+2. For each coordinate block:
+   - Move mouse to desired position
+   - Press **Ctrl**
+   - Automatically moves to next block
 
-## 🎮 Горячие клавиши
+### Keyboard Input
 
-- **F6** - старт/остановка автокликов
+- Add "⌨️ Ввод текста" block
+- Enter text in dialog
+- Check "Нажать Enter после ввода" to auto-submit
+- Supports any language (uses clipboard)
 
-## 📦 Зависимости
+### Grouping Actions
 
-- `pyautogui` - для управления мышью
-- `pillow` - для работы со скриншотами (требуется pyautogui)
-- `keyboard` - для горячих клавиш
+Create reusable subprocesses:
+1. Add "▶ Начало группы" (Start Group)
+2. Add your action blocks
+3. Add "◀ Конец группы" (End Group)
+4. Connect with "🔄 Повторить" to repeat the entire group
 
-## 🔧 Устранение неполадок
+## 💾 Saving & Loading
 
-### Программа не запускается
-- Убедитесь, что установлен Python 3.7+
-- Проверьте, что все зависимости установлены: `pip install -r requirements.txt`
+- **💾 Сохранить** - Save your flow to `vibe_click_config.json`
+- **📂 Загрузить** - Load previously saved flow
+- Auto-loads last saved flow on startup
 
-### Не работают клики
-- Проверьте, что выбрана правильная позиция
-- Убедитесь, что координаты отображаются в программе
-- Попробуйте запустить программу от имени администратора
+## 🔧 Configuration
 
-### Не работает горячая клавиша F6
-- Запустите программу от имени администратора
-- Проверьте, что F6 не занята другим приложением
+Flows are saved in JSON format at `vibe_click_config.json`:
 
-## 📝 Лицензия
+```json
+{
+  "blocks": [
+    {
+      "id": 1,
+      "type": "coordinate",
+      "x": 100,
+      "y": 50,
+      "data": {"x": 500, "y": 300}
+    }
+  ],
+  "connections": [
+    {
+      "from": 1,
+      "to": 2,
+      "delay": 1.5
+    }
+  ]
+}
+```
 
-Свободное использование. Используйте на свой риск.
+## 🛡️ Safety Features
 
-## 🤝 Вклад
+- **Failsafe** - Move mouse to top-left corner to emergency stop
+- **Q Key** - Emergency stop hotkey
+- **Stop Button** - Click "⏸ Остановить" or press **F6** again
 
-Если есть идеи по улучшению - welcome!
+## 🎯 Use Cases
+
+- **UI Testing** - Automate repetitive click sequences
+- **Form Filling** - Batch data entry
+- **Game Automation** - Repeated actions in games
+- **Workflow Automation** - Streamline repetitive tasks
+- **Demo Recording** - Create consistent demonstrations
+
+## 🐛 Troubleshooting
+
+**Text input not working?**
+- Make sure the target field is focused before execution
+- Check if clipboard is accessible
+- Try with English text first to verify
+
+**Coordinates not accurate?**
+- Ensure screen scaling is 100% in Windows
+- Recapture coordinates if window was moved
+- Use absolute coordinates, not relative
+
+**Execution too fast/slow?**
+- Add delays on arrows (double-click arrow)
+- Use delay blocks for longer pauses
+- Adjust timing per connection
+
+## 📄 License
+
+MIT License - feel free to use and modify!
+
+## 🤝 Contributing
+
+Contributions welcome! Feel free to:
+- Report bugs
+- Suggest features
+- Submit pull requests
+
+## 👨‍💻 Author
+
+Created with ❤️ for automation enthusiasts
 
 ---
 
-**Сделано с ❤️ для удобства автоматизации**
-
+**⚠️ Disclaimer:** Use responsibly. Some applications may have policies against automation tools.

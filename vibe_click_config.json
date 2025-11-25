@@ -1,85 +1,205 @@
 {
-    "click_x": 1147,
-    "click_y": 931,
-    "interval": 1.0,
-    "click_type": "left",
-    "action_chain": [
+    "blocks": [
         {
-            "name": "Шаг 7",
-            "x": 1138,
-            "y": 1406,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 19,
+            "type": "coordinate",
+            "x": 231,
+            "y": 8,
+            "data": {
+                "x": 131,
+                "y": 67
+            }
         },
         {
-            "name": "Шаг 9",
-            "x": 1013,
-            "y": 1402,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 20,
+            "type": "click",
+            "x": 343,
+            "y": 15,
+            "data": {
+                "click_type": "right"
+            }
         },
         {
-            "name": "Шаг 10",
-            "x": 2418,
-            "y": 36,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 21,
+            "type": "coordinate",
+            "x": 459,
+            "y": 13,
+            "data": {
+                "x": 201,
+                "y": 94
+            }
         },
         {
-            "name": "Шаг 11",
-            "x": 1684,
-            "y": 1411,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 22,
+            "type": "click",
+            "x": 641,
+            "y": 7,
+            "data": {
+                "click_type": "left"
+            }
         },
         {
-            "name": "Шаг 12",
-            "x": 12,
-            "y": 180,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 26,
+            "type": "coordinate",
+            "x": 795,
+            "y": 7,
+            "data": {
+                "x": 562,
+                "y": 310
+            }
         },
         {
-            "name": "Шаг 13",
-            "x": 30,
-            "y": 202,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 27,
+            "type": "click",
+            "x": 977,
+            "y": 5,
+            "data": {
+                "click_type": "left"
+            }
         },
         {
-            "name": "Шаг 14",
-            "x": 50,
-            "y": 222,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 28,
+            "type": "keyboard_input",
+            "x": 976,
+            "y": 171,
+            "data": {
+                "text": "Skopenko Vladyslav",
+                "press_enter": true
+            }
         },
         {
-            "name": "Шаг 15",
-            "x": 1433,
-            "y": 1420,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 29,
+            "type": "coordinate",
+            "x": 781,
+            "y": 175,
+            "data": {
+                "x": 682,
+                "y": 713
+            }
         },
         {
-            "name": "Шаг 16",
-            "x": 1630,
-            "y": 1407,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 30,
+            "type": "click",
+            "x": 583,
+            "y": 168,
+            "data": {
+                "click_type": "left"
+            }
         },
         {
-            "name": "Шаг 17",
-            "x": 2247,
-            "y": 29,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 31,
+            "type": "coordinate",
+            "x": 412,
+            "y": 169,
+            "data": {
+                "x": 1798,
+                "y": 271
+            }
         },
         {
-            "name": "Шаг 18",
-            "x": 647,
-            "y": 1421,
-            "action_type": "Клик левой",
-            "button": "left"
+            "id": 32,
+            "type": "click",
+            "x": 397,
+            "y": 345,
+            "data": {
+                "click_type": "left"
+            }
+        },
+        {
+            "id": 33,
+            "type": "group",
+            "x": 0,
+            "y": 8,
+            "data": {
+                "group_type": "start",
+                "name": "Группа"
+            }
+        },
+        {
+            "id": 34,
+            "type": "group",
+            "x": 602,
+            "y": 348,
+            "data": {
+                "group_type": "end",
+                "name": "Группа"
+            }
+        },
+        {
+            "id": 35,
+            "type": "repeat",
+            "x": 143,
+            "y": 512,
+            "data": {
+                "repeat_count": 2
+            }
+        }
+    ],
+    "connections": [
+        {
+            "from": 19,
+            "to": 20,
+            "delay": 0.0
+        },
+        {
+            "from": 20,
+            "to": 21,
+            "delay": 0.0
+        },
+        {
+            "from": 21,
+            "to": 22,
+            "delay": 1.5
+        },
+        {
+            "from": 22,
+            "to": 26,
+            "delay": 0.0
+        },
+        {
+            "from": 26,
+            "to": 27,
+            "delay": 2.0
+        },
+        {
+            "from": 27,
+            "to": 28,
+            "delay": 2.0
+        },
+        {
+            "from": 28,
+            "to": 29,
+            "delay": 0.0
+        },
+        {
+            "from": 29,
+            "to": 30,
+            "delay": 2.0
+        },
+        {
+            "from": 30,
+            "to": 31,
+            "delay": 0.0
+        },
+        {
+            "from": 31,
+            "to": 32,
+            "delay": 4.0
+        },
+        {
+            "from": 33,
+            "to": 19,
+            "delay": 0.0
+        },
+        {
+            "from": 32,
+            "to": 34,
+            "delay": 0.0
+        },
+        {
+            "from": 35,
+            "to": 33,
+            "delay": 0.0
         }
     ]
 }

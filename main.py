@@ -7,864 +7,2059 @@ import keyboard
 import json
 import os
 from pynput import mouse
+import math
 
-class AutoClicker:
+class Block:
+    """Базовый класс для блоков"""
+    def __init__(self, canvas, x, y, block_type, block_id):
+        self.canvas = canvas
+        self.x = x
+        self.y = y
+        self.type = block_type  # 'coordinate' or 'click'
+        self.id = block_id
+        self.shapes = []  # Список ID элементов canvas
+        self.text_ids = []
+        self.data = {}
+        self.connections_out = []  # Исходящие связи
+        self.connections_in = []   # Входящие связи
+        
+    def draw(self):
+        """Отрисовка блока"""
+        pass
+    
+    def move(self, dx, dy):
+        """Перемещение блока"""
+        self.x += dx
+        self.y += dy
+        for shape_id in self.shapes + self.text_ids:
+            self.canvas.move(shape_id, dx, dy)
+        
+    def contains_point(self, x, y):
+        """Проверка попадания точки в блок"""
+        return False
+    
+    def delete(self):
+        """Удаление блока"""
+        for shape_id in self.shapes + self.text_ids:
+            self.canvas.delete(shape_id)
+
+class CoordinateBlock(Block):
+    """Блок координат (квадрат)"""
+    SIZE = 80
+    
+    def __init__(self, canvas, x, y, block_id):
+        super().__init__(canvas, x, y, 'coordinate', block_id)
+        self.data = {'x': None, 'y': None}
+        self.draw()
+    
+    def draw(self):
+        """Отрисовка квадрата"""
+        # Тень
+        shadow = self.canvas.create_rectangle(
+            self.x + 3, self.y + 3,
+            self.x + self.SIZE + 3, self.y + self.SIZE + 3,
+            fill="#bdc3c7", outline=""
+        )
+        self.shapes.append(shadow)
+        
+        # Основной квадрат
+        rect = self.canvas.create_rectangle(
+            self.x, self.y,
+            self.x + self.SIZE, self.y + self.SIZE,
+            fill="#3498db",
+            outline="#2980b9",
+            width=3,
+            tags=f"block_{self.id}"
+        )
+        self.shapes.append(rect)
+        
+        # Иконка
+        icon = self.canvas.create_text(
+            self.x + self.SIZE // 2, self.y + 20,
+            text="📍",
+            font=("Segoe UI", 16),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(icon)
+        
+        # Текст
+        text = self.canvas.create_text(
+            self.x + self.SIZE // 2, self.y + 45,
+            text="Координата",
+            font=("Segoe UI", 8, "bold"),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(text)
+        
+        # Координаты
+        self.coord_text = self.canvas.create_text(
+            self.x + self.SIZE // 2, self.y + 65,
+            text="Не задано",
+            font=("Segoe UI", 7),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(self.coord_text)
+    
+    def update_coordinates(self, x, y):
+        """Обновление координат"""
+        self.data['x'] = x
+        self.data['y'] = y
+        self.canvas.itemconfig(self.coord_text, text=f"X:{x}\nY:{y}")
+    
+    def contains_point(self, x, y):
+        """Проверка попадания точки в квадрат"""
+        return (self.x <= x <= self.x + self.SIZE and 
+                self.y <= y <= self.y + self.SIZE)
+
+class ClickBlock(Block):
+    """Блок клика (треугольник)"""
+    SIZE = 80
+    
+    def __init__(self, canvas, x, y, block_id, click_type='left'):
+        super().__init__(canvas, x, y, 'click', block_id)
+        self.data = {'click_type': click_type}
+        self.draw()
+    
+    def draw(self):
+        """Отрисовка треугольника"""
+        # Цвета в зависимости от типа клика
+        colors = {
+            'left': ("#27ae60", "#229954"),
+            'right': ("#e74c3c", "#c0392b"),
+            'middle': ("#f39c12", "#e67e22")
+        }
+        fill_color, outline_color = colors.get(self.data['click_type'], colors['left'])
+        
+        # Вершины треугольника (указывает вниз)
+        points = [
+            self.x + self.SIZE // 2, self.y,  # Верхняя вершина
+            self.x, self.y + self.SIZE,       # Нижняя левая
+            self.x + self.SIZE, self.y + self.SIZE  # Нижняя правая
+        ]
+        
+        # Тень
+        shadow_points = [p + 3 for p in points]
+        shadow = self.canvas.create_polygon(
+            shadow_points,
+            fill="#bdc3c7", outline=""
+        )
+        self.shapes.append(shadow)
+        
+        # Основной треугольник
+        triangle = self.canvas.create_polygon(
+            points,
+            fill=fill_color,
+            outline=outline_color,
+            width=3,
+            tags=f"block_{self.id}"
+        )
+        self.shapes.append(triangle)
+        
+        # Иконка
+        icons = {'left': "👆", 'right': "👉", 'middle': "☝️"}
+        icon = self.canvas.create_text(
+            self.x + self.SIZE // 2, self.y + 25,
+            text=icons.get(self.data['click_type'], "🖱️"),
+            font=("Segoe UI", 16),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(icon)
+        
+        # Текст
+        labels = {'left': "Левый", 'right': "Правый", 'middle': "Средний"}
+        text = self.canvas.create_text(
+            self.x + self.SIZE // 2, self.y + 50,
+            text=f"{labels.get(self.data['click_type'], 'Клик')}",
+            font=("Segoe UI", 8, "bold"),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(text)
+        
+        click_text = self.canvas.create_text(
+            self.x + self.SIZE // 2, self.y + 65,
+            text="клик",
+            font=("Segoe UI", 7),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(click_text)
+    
+    def contains_point(self, x, y):
+        """Проверка попадания точки в треугольник"""
+        # Упрощенная проверка - используем прямоугольник вокруг треугольника
+        return (self.x <= x <= self.x + self.SIZE and 
+                self.y <= y <= self.y + self.SIZE)
+
+class Connection:
+    """Соединение между блоками"""
+    def __init__(self, canvas, from_block, to_block, delay=0.0):
+        self.canvas = canvas
+        self.from_block = from_block
+        self.to_block = to_block
+        self.delay = delay  # Задержка на переходе
+        self.line_id = None
+        self.arrow_id = None
+        self.text_id = None
+        self.draw()
+    
+    def draw(self):
+        """Отрисовка стрелки"""
+        # Центры блоков (учитываем разные типы блоков)
+        if hasattr(self.from_block, 'SIZE'):
+            x1 = self.from_block.x + self.from_block.SIZE // 2
+            y1 = self.from_block.y + self.from_block.SIZE // 2
+        else:  # GroupBlock с WIDTH и HEIGHT
+            x1 = self.from_block.x + self.from_block.WIDTH // 2
+            y1 = self.from_block.y + self.from_block.HEIGHT // 2
+        
+        if hasattr(self.to_block, 'SIZE'):
+            x2 = self.to_block.x + self.to_block.SIZE // 2
+            y2 = self.to_block.y + self.to_block.SIZE // 2
+        else:  # GroupBlock с WIDTH и HEIGHT
+            x2 = self.to_block.x + self.to_block.WIDTH // 2
+            y2 = self.to_block.y + self.to_block.HEIGHT // 2
+        
+        # Рисуем линию
+        self.line_id = self.canvas.create_line(
+            x1, y1, x2, y2,
+            arrow=tk.LAST,
+            fill="#34495e",
+            width=3,
+            arrowshape=(12, 15, 5),
+            tags="connection"
+        )
+        
+        # Опускаем на задний план
+        self.canvas.tag_lower("connection")
+        
+        # Если есть задержка - показываем её на стрелке
+        if self.delay > 0:
+            mid_x = (x1 + x2) // 2
+            mid_y = (y1 + y2) // 2
+            
+            # Фон для текста
+            self.canvas.create_oval(
+                mid_x - 15, mid_y - 15,
+                mid_x + 15, mid_y + 15,
+                fill="#ff9800",
+                outline="#f57c00",
+                width=2,
+                tags="connection"
+            )
+            
+            # Текст с временем
+            self.text_id = self.canvas.create_text(
+                mid_x, mid_y,
+                text=f"{self.delay}s",
+                font=("Segoe UI", 8, "bold"),
+                fill="white",
+                tags="connection"
+            )
+    
+    def update(self):
+        """Обновление позиции стрелки"""
+        if self.line_id:
+            self.canvas.delete(self.line_id)
+        if self.text_id:
+            self.canvas.delete(self.text_id)
+        self.draw()
+    
+    def delete(self):
+        """Удаление соединения"""
+        if self.line_id:
+            self.canvas.delete(self.line_id)
+        if self.text_id:
+            self.canvas.delete(self.text_id)
+    
+    def contains_point(self, x, y, tolerance=10):
+        """Проверка попадания точки на линию"""
+        # Получаем координаты линии
+        if hasattr(self.from_block, 'SIZE'):
+            x1 = self.from_block.x + self.from_block.SIZE // 2
+            y1 = self.from_block.y + self.from_block.SIZE // 2
+        else:
+            x1 = self.from_block.x + self.from_block.WIDTH // 2
+            y1 = self.from_block.y + self.from_block.HEIGHT // 2
+        
+        if hasattr(self.to_block, 'SIZE'):
+            x2 = self.to_block.x + self.to_block.SIZE // 2
+            y2 = self.to_block.y + self.to_block.SIZE // 2
+        else:
+            x2 = self.to_block.x + self.to_block.WIDTH // 2
+            y2 = self.to_block.y + self.to_block.HEIGHT // 2
+        
+        # Расстояние от точки до линии
+        line_len = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+        if line_len == 0:
+            return False
+        
+        # Расстояние от точки до линии через векторное произведение
+        distance = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1) / line_len
+        
+        # Проверяем что точка находится между началом и концом линии
+        dot_product = ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / (line_len ** 2)
+        
+        return distance <= tolerance and 0 <= dot_product <= 1
+
+class DelayBlock(Block):
+    """Блок задержки (зеленый круг)"""
+    SIZE = 80
+    
+    def __init__(self, canvas, x, y, block_id, delay=1.0):
+        super().__init__(canvas, x, y, 'delay', block_id)
+        self.data = {'delay': delay}
+        self.draw()
+    
+    def draw(self):
+        """Отрисовка зеленого круга"""
+        radius = self.SIZE // 2
+        center_x = self.x + radius
+        center_y = self.y + radius
+        
+        # Тень
+        shadow = self.canvas.create_oval(
+            self.x + 3, self.y + 3,
+            self.x + self.SIZE + 3, self.y + self.SIZE + 3,
+            fill="#bdc3c7", outline=""
+        )
+        self.shapes.append(shadow)
+        
+        # Основной круг
+        circle = self.canvas.create_oval(
+            self.x, self.y,
+            self.x + self.SIZE, self.y + self.SIZE,
+            fill="#27ae60",
+            outline="#229954",
+            width=3,
+            tags=f"block_{self.id}"
+        )
+        self.shapes.append(circle)
+        
+        # Иконка
+        icon = self.canvas.create_text(
+            center_x, center_y - 15,
+            text="⏱️",
+            font=("Segoe UI", 16),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(icon)
+        
+        # Текст
+        text = self.canvas.create_text(
+            center_x, center_y + 5,
+            text="Задержка",
+            font=("Segoe UI", 8, "bold"),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(text)
+        
+        # Значение задержки
+        self.delay_text = self.canvas.create_text(
+            center_x, center_y + 20,
+            text=f"{self.data['delay']} сек",
+            font=("Segoe UI", 7),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(self.delay_text)
+    
+    def update_delay(self, delay):
+        """Обновление задержки"""
+        self.data['delay'] = delay
+        center_x = self.x + self.SIZE // 2
+        center_y = self.y + self.SIZE // 2
+        self.canvas.itemconfig(self.delay_text, text=f"{delay} сек")
+    
+    def contains_point(self, x, y):
+        """Проверка попадания точки в круг"""
+        radius = self.SIZE // 2
+        center_x = self.x + radius
+        center_y = self.y + radius
+        distance = math.sqrt((x - center_x)**2 + (y - center_y)**2)
+        return distance <= radius
+
+class RepeatBlock(Block):
+    """Блок повторений (синий круг)"""
+    SIZE = 80
+    
+    def __init__(self, canvas, x, y, block_id, repeat_count=1):
+        super().__init__(canvas, x, y, 'repeat', block_id)
+        self.data = {'repeat_count': repeat_count}
+        self.draw()
+    
+    def draw(self):
+        """Отрисовка синего круга"""
+        radius = self.SIZE // 2
+        center_x = self.x + radius
+        center_y = self.y + radius
+        
+        # Тень
+        shadow = self.canvas.create_oval(
+            self.x + 3, self.y + 3,
+            self.x + self.SIZE + 3, self.y + self.SIZE + 3,
+            fill="#bdc3c7", outline=""
+        )
+        self.shapes.append(shadow)
+        
+        # Основной круг
+        circle = self.canvas.create_oval(
+            self.x, self.y,
+            self.x + self.SIZE, self.y + self.SIZE,
+            fill="#3498db",
+            outline="#2980b9",
+            width=3,
+            tags=f"block_{self.id}"
+        )
+        self.shapes.append(circle)
+        
+        # Иконка
+        icon = self.canvas.create_text(
+            center_x, center_y - 15,
+            text="🔄",
+            font=("Segoe UI", 16),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(icon)
+        
+        # Текст
+        text = self.canvas.create_text(
+            center_x, center_y + 5,
+            text="Повторить",
+            font=("Segoe UI", 8, "bold"),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(text)
+        
+        # Количество повторов
+        self.repeat_text = self.canvas.create_text(
+            center_x, center_y + 20,
+            text=f"{self.data['repeat_count']}x",
+            font=("Segoe UI", 7),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(self.repeat_text)
+    
+    def update_repeat_count(self, count):
+        """Обновление количества повторов"""
+        self.data['repeat_count'] = count
+        center_x = self.x + self.SIZE // 2
+        center_y = self.y + self.SIZE // 2
+        self.canvas.itemconfig(self.repeat_text, text=f"{count}x")
+    
+    def contains_point(self, x, y):
+        """Проверка попадания точки в круг"""
+        radius = self.SIZE // 2
+        center_x = self.x + radius
+        center_y = self.y + radius
+        distance = math.sqrt((x - center_x)**2 + (y - center_y)**2)
+        return distance <= radius
+
+class GroupBlock(Block):
+    """Блок группы/подпроцесса (прямоугольник с пунктиром)"""
+    WIDTH = 150
+    HEIGHT = 100
+    
+    def __init__(self, canvas, x, y, block_id, group_type='start'):
+        super().__init__(canvas, x, y, 'group', block_id)
+        self.data = {'group_type': group_type, 'name': 'Группа'}
+        self.draw()
+    
+    def draw(self):
+        """Отрисовка прямоугольника группы"""
+        # Цвет в зависимости от типа
+        if self.data['group_type'] == 'start':
+            fill_color = "#9b59b6"
+            outline_color = "#8e44ad"
+            icon = "▶"
+            label = "Начало группы"
+        else:
+            fill_color = "#e67e22"
+            outline_color = "#d35400"
+            icon = "◀"
+            label = "Конец группы"
+        
+        # Тень
+        shadow = self.canvas.create_rectangle(
+            self.x + 3, self.y + 3,
+            self.x + self.WIDTH + 3, self.y + self.HEIGHT + 3,
+            fill="#bdc3c7", outline=""
+        )
+        self.shapes.append(shadow)
+        
+        # Основной прямоугольник с пунктиром
+        rect = self.canvas.create_rectangle(
+            self.x, self.y,
+            self.x + self.WIDTH, self.y + self.HEIGHT,
+            fill=fill_color,
+            outline=outline_color,
+            width=3,
+            dash=(5, 3),
+            tags=f"block_{self.id}"
+        )
+        self.shapes.append(rect)
+        
+        # Иконка
+        icon_text = self.canvas.create_text(
+            self.x + self.WIDTH // 2, self.y + 25,
+            text=icon,
+            font=("Segoe UI", 20, "bold"),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(icon_text)
+        
+        # Текст
+        text = self.canvas.create_text(
+            self.x + self.WIDTH // 2, self.y + 55,
+            text=label,
+            font=("Segoe UI", 9, "bold"),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(text)
+        
+        # Название группы
+        self.name_text = self.canvas.create_text(
+            self.x + self.WIDTH // 2, self.y + 75,
+            text=self.data['name'],
+            font=("Segoe UI", 8),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(self.name_text)
+    
+    def update_name(self, name):
+        """Обновление названия группы"""
+        self.data['name'] = name
+        self.canvas.itemconfig(self.name_text, text=name)
+    
+    def contains_point(self, x, y):
+        """Проверка попадания точки в прямоугольник"""
+        return (self.x <= x <= self.x + self.WIDTH and 
+                self.y <= y <= self.y + self.HEIGHT)
+
+class KeyboardInputBlock(Block):
+    """Блок ввода текста с клавиатуры (ромб)"""
+    SIZE = 90
+    
+    def __init__(self, canvas, x, y, block_id, text='', press_enter=True):
+        super().__init__(canvas, x, y, 'keyboard_input', block_id)
+        self.data = {'text': text, 'press_enter': press_enter}
+        self.draw()
+    
+    def draw(self):
+        """Отрисовка ромба"""
+        # Координаты ромба
+        center_x = self.x + self.SIZE // 2
+        center_y = self.y + self.SIZE // 2
+        
+        points = [
+            center_x, self.y,                    # Верхняя вершина
+            self.x + self.SIZE, center_y,        # Правая вершина
+            center_x, self.y + self.SIZE,        # Нижняя вершина
+            self.x, center_y                     # Левая вершина
+        ]
+        
+        # Тень
+        shadow_points = [p + 3 if i % 2 == 0 else p + 3 for i, p in enumerate(points)]
+        shadow = self.canvas.create_polygon(
+            shadow_points,
+            fill="#bdc3c7", outline=""
+        )
+        self.shapes.append(shadow)
+        
+        # Основной ромб
+        diamond = self.canvas.create_polygon(
+            points,
+            fill="#16a085",
+            outline="#138d75",
+            width=3,
+            tags=f"block_{self.id}"
+        )
+        self.shapes.append(diamond)
+        
+        # Иконка
+        icon = self.canvas.create_text(
+            center_x, center_y - 15,
+            text="⌨️",
+            font=("Segoe UI", 14),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(icon)
+        
+        # Текст
+        text_label = self.canvas.create_text(
+            center_x, center_y + 5,
+            text="Ввод",
+            font=("Segoe UI", 8, "bold"),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(text_label)
+        
+        # Отображение текста (сокращённое)
+        display_text = self.data['text'][:8] + "..." if len(self.data['text']) > 8 else self.data['text']
+        if not display_text:
+            display_text = "(пусто)"
+        
+        self.text_display = self.canvas.create_text(
+            center_x, center_y + 20,
+            text=display_text,
+            font=("Segoe UI", 6),
+            fill="white",
+            tags=f"block_{self.id}"
+        )
+        self.text_ids.append(self.text_display)
+    
+    def update_text(self, text, press_enter):
+        """Обновление текста"""
+        self.data['text'] = text
+        self.data['press_enter'] = press_enter
+        
+        display_text = text[:8] + "..." if len(text) > 8 else text
+        if not display_text:
+            display_text = "(пусто)"
+        
+        self.canvas.itemconfig(self.text_display, text=display_text)
+    
+    def contains_point(self, x, y):
+        """Проверка попадания точки в ромб"""
+        center_x = self.x + self.SIZE // 2
+        center_y = self.y + self.SIZE // 2
+        
+        # Упрощенная проверка - используем квадрат вокруг ромба
+        return (self.x <= x <= self.x + self.SIZE and 
+                self.y <= y <= self.y + self.SIZE)
+
+class FlowEditor:
     def __init__(self, root):
         self.root = root
-        self.root.title("Vibe Click - Автокликер")
-        self.root.geometry("1250x750")
-        self.root.resizable(False, False)
-        self.root.configure(bg="#f0f0f0")
+        self.root.title("BPMN FlowClick Studio")
+        self.root.geometry("1600x900")
+        self.root.configure(bg="#ecf0f1")
         
         # Переменные
-        self.is_clicking = False
-        self.click_x = None
-        self.click_y = None
-        self.click_thread = None
+        self.blocks = []
+        self.connections = []
+        self.next_block_id = 1
+        self.selected_block = None
+        self.drag_data = {"x": 0, "y": 0, "block": None}
+        self.connection_mode = False
+        self.connection_start_block = None
+        self.is_running = False
         self.config_file = "vibe_click_config.json"
-        self.action_chain = []  # Цепочка действий
-        self.current_action_index = 0
-        self.mouse_listener = None  # Для отслеживания кликов мыши
-        self.waiting_for_click = False
+        self.batch_coordinate_mode = False
+        self.batch_coord_blocks = []
+        self.batch_coord_index = 0
         
-        # Настройка безопасности pyautogui
+        # Настройка pyautogui
         pyautogui.FAILSAFE = True
         
         self.create_widgets()
-        self.load_settings()  # Загружаем настройки при старте
         
         # Горячие клавиши
-        keyboard.add_hotkey('f6', self.toggle_clicking)  # Старт/стоп
-        keyboard.add_hotkey('q', self.emergency_stop)    # Экстренная остановка
+        keyboard.add_hotkey('ctrl', self.start_coordinate_selection, suppress=False)
+        keyboard.add_hotkey('f6', self.toggle_execution)
+        keyboard.add_hotkey('q', self.emergency_stop)
         
     def create_widgets(self):
-        # Заголовок с градиентом (уменьшенный)
-        title_frame = tk.Frame(self.root, bg="#2c3e50", height=45)
+        # Заголовок
+        title_frame = tk.Frame(self.root, bg="#2c3e50", height=50)
         title_frame.pack(fill="x")
         title_frame.pack_propagate(False)
         
         title_label = tk.Label(
-            title_frame, 
-            text="Vibe Click - Автокликер",
-            font=("Segoe UI", 16, "bold"),
+            title_frame,
+            text="🎯 FlowClick Studio",
+            font=("Segoe UI", 18, "bold"),
             fg="white",
             bg="#2c3e50"
         )
-        title_label.pack(pady=8)
+        title_label.pack(pady=10)
         
-        # Основной контент с отступами
-        main_content = tk.Frame(self.root, bg="#f0f0f0")
-        main_content.pack(fill="both", expand=True, padx=8, pady=5)
+        # Панель инструментов
+        toolbar_frame = tk.Frame(self.root, bg="#34495e", height=120)
+        toolbar_frame.pack(fill="x")
+        toolbar_frame.pack_propagate(False)
         
-        # Основной канвас для блок-схемы (уменьшенный)
-        canvas_frame = tk.Frame(main_content, bg="#ffffff", relief="solid", bd=1)
-        canvas_frame.pack(pady=3)
+        toolbar_content = tk.Frame(toolbar_frame, bg="#34495e")
+        toolbar_content.pack(pady=10)
         
-        # Инструкция над схемой
-        instruction_label = tk.Label(
-            canvas_frame,
-            text="📌 Выбери координаты → Добавь в цепочку → Запусти",
-            font=("Segoe UI", 8),
-            fg="#7f8c8d",
-            bg="#ffffff",
-            pady=3
+        # ПЕРВЫЙ РЯД - Блоки действий
+        row1 = tk.Frame(toolbar_content, bg="#34495e")
+        row1.pack(pady=2)
+        
+        # Кнопки добавления блоков
+        tk.Label(
+            row1,
+            text="Добавить блок:",
+            bg="#34495e",
+            fg="white",
+            font=("Segoe UI", 10, "bold")
+        ).grid(row=0, column=0, padx=10)
+        
+        tk.Button(
+            row1,
+            text="📍 Координата",
+            command=self.add_coordinate_block,
+            bg="#3498db",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=1, padx=5)
+        
+        tk.Button(
+            row1,
+            text="👆 Левый клик",
+            command=lambda: self.add_click_block('left'),
+            bg="#27ae60",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=2, padx=5)
+        
+        tk.Button(
+            row1,
+            text="👉 Правый клик",
+            command=lambda: self.add_click_block('right'),
+            bg="#e74c3c",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=3, padx=5)
+        
+        tk.Button(
+            row1,
+            text="☝️ Средний клик",
+            command=lambda: self.add_click_block('middle'),
+            bg="#f39c12",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=4, padx=5)
+        
+        tk.Button(
+            row1,
+            text="⌨️ Ввод текста",
+            command=self.add_keyboard_input_block,
+            bg="#16a085",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=5, padx=5)
+        
+        # Разделитель
+        ttk.Separator(row1, orient="vertical").grid(row=0, column=6, padx=15, sticky="ns")
+        
+        # Кнопка пакетного задания координат
+        self.batch_coord_btn = tk.Button(
+            row1,
+            text="🎯 Задать все координаты",
+            command=self.start_batch_coordinate_mode,
+            bg="#9b59b6",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
         )
-        instruction_label.pack(fill="x")
+        self.batch_coord_btn.grid(row=0, column=7, padx=5)
         
-        canvas = Canvas(
+        # Разделитель
+        ttk.Separator(row1, orient="vertical").grid(row=0, column=8, padx=15, sticky="ns")
+        
+        # Кнопка соединения
+        self.connect_btn = tk.Button(
+            row1,
+            text="🔗 Соединить",
+            command=self.toggle_connection_mode,
+            bg="#9b59b6",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        )
+        self.connect_btn.grid(row=0, column=9, padx=5)
+        
+        # ВТОРОЙ РЯД - Управляющие блоки и действия
+        row2 = tk.Frame(toolbar_content, bg="#34495e")
+        row2.pack(pady=2)
+        
+        tk.Label(
+            row2,
+            text="Управление:",
+            bg="#34495e",
+            fg="white",
+            font=("Segoe UI", 10, "bold")
+        ).grid(row=0, column=0, padx=10)
+        
+        tk.Button(
+            row2,
+            text="🔄 Повторить (раз)",
+            command=self.add_repeat_block,
+            bg="#3498db",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=1, padx=5)
+        
+        tk.Button(
+            row2,
+            text="⏱️ Задержка (сек)",
+            command=self.add_delay_block,
+            bg="#27ae60",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=2, padx=5)
+        
+        tk.Button(
+            row2,
+            text="▶ Начало группы",
+            command=lambda: self.add_group_block('start'),
+            bg="#9b59b6",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=3, padx=5)
+        
+        tk.Button(
+            row2,
+            text="◀ Конец группы",
+            command=lambda: self.add_group_block('end'),
+            bg="#e67e22",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=4, padx=5)
+        
+        # Разделитель
+        ttk.Separator(row2, orient="vertical").grid(row=0, column=5, padx=15, sticky="ns")
+        
+        # Кнопки управления
+        self.run_btn = tk.Button(
+            row2,
+            text="▶ Запустить",
+            command=self.toggle_execution,
+            bg="#27ae60",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=15,
+            pady=5,
+            relief="flat"
+        )
+        self.run_btn.grid(row=0, column=6, padx=5)
+        
+        tk.Button(
+            row2,
+            text="🗑️ Очистить",
+            command=self.clear_canvas,
+            bg="#95a5a6",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=7, padx=5)
+        
+        tk.Button(
+            row2,
+            text="💾 Сохранить",
+            command=self.save_flow,
+            bg="#3498db",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=8, padx=5)
+        
+        tk.Button(
+            row2,
+            text="📂 Загрузить",
+            command=self.load_flow,
+            bg="#3498db",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=9, padx=5)
+        
+        # Основной Canvas
+        canvas_frame = tk.Frame(self.root, bg="#ffffff", relief="solid", bd=2)
+        canvas_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        self.canvas = Canvas(
             canvas_frame,
-            width=700,
-            height=120,
             bg="#ffffff",
             highlightthickness=0
         )
-        canvas.pack(pady=5)
+        self.canvas.pack(fill="both", expand=True)
         
-        # БЛОК 1: Выбор координат (слева)
-        block1_x, block1_y = 80, 15
-        block1_width, block1_height = 200, 90
+        # Сетка на canvas
+        self.draw_grid()
         
-        # Рисуем квадрат 1 с тенью
-        canvas.create_rectangle(
-            block1_x + 3, block1_y + 3,
-            block1_x + block1_width + 3, block1_y + block1_height + 3,
-            fill="#bdc3c7", outline="",
-        )
-        canvas.create_rectangle(
-            block1_x, block1_y,
-            block1_x + block1_width, block1_y + block1_height,
-            fill="#3498db",
-            outline="#2980b9",
-            width=2
-        )
-        
-        # Иконка и текст блока 1
-        canvas.create_text(
-            block1_x + block1_width // 2, block1_y + 25,
-            text="📍",
-            font=("Segoe UI", 20),
-            fill="white"
-        )
-        canvas.create_text(
-            block1_x + block1_width // 2, block1_y + 55,
-            text="ШАГ 1",
-            font=("Segoe UI", 10, "bold"),
-            fill="white"
-        )
-        canvas.create_text(
-            block1_x + block1_width // 2, block1_y + 72,
-            text="Выбор координат",
-            font=("Segoe UI", 9),
-            fill="white"
-        )
-        
-        # СТРЕЛКА между блоками (более толстая и красивая)
-        arrow_start_x = block1_x + block1_width + 15
-        arrow_end_x = 400
-        arrow_y = block1_y + block1_height // 2
-        
-        # Рисуем стрелку
-        canvas.create_line(
-            arrow_start_x, arrow_y,
-            arrow_end_x, arrow_y,
-            arrow=tk.LAST,
-            fill="#34495e",
-            width=5,
-            arrowshape=(16, 20, 6)
-        )
-        
-        # БЛОК 2: Клик мышкой (справа)
-        block2_x, block2_y = 420, 15
-        block2_width, block2_height = 200, 90
-        
-        # Рисуем квадрат 2 с тенью
-        canvas.create_rectangle(
-            block2_x + 3, block2_y + 3,
-            block2_x + block2_width + 3, block2_y + block2_height + 3,
-            fill="#bdc3c7", outline="",
-        )
-        canvas.create_rectangle(
-            block2_x, block2_y,
-            block2_x + block2_width, block2_y + block2_height,
-            fill="#e74c3c",
-            outline="#c0392b",
-            width=2
-        )
-        
-        # Иконка и текст блока 2
-        canvas.create_text(
-            block2_x + block2_width // 2, block2_y + 25,
-            text="▶️",
-            font=("Segoe UI", 20),
-            fill="white"
-        )
-        canvas.create_text(
-            block2_x + block2_width // 2, block2_y + 55,
-            text="ШАГ 2",
-            font=("Segoe UI", 10, "bold"),
-            fill="white"
-        )
-        canvas.create_text(
-            block2_x + block2_width // 2, block2_y + 72,
-            text="Запуск процесса",
-            font=("Segoe UI", 9),
-            fill="white"
-        )
-        
-        # Кнопки под блоками (уменьшенные)
-        buttons_frame = tk.Frame(main_content, bg="#f0f0f0")
-        buttons_frame.pack(pady=5)
-        
-        # Кнопка для блока 1 (выбор координат)
-        self.select_btn = tk.Button(
-            buttons_frame,
-            text="📍 Задать координаты",
-            command=self.select_position,
-            bg="#3498db",
-            fg="white",
-            font=("Segoe UI", 10, "bold"),
-            cursor="hand2",
-            padx=15,
-            pady=8,
-            relief="flat",
-            activebackground="#2980b9",
-            activeforeground="white"
-        )
-        self.select_btn.grid(row=0, column=0, padx=8)
-        
-        # Кнопка для блока 2 (запуск кликов)
-        self.start_stop_btn = tk.Button(
-            buttons_frame,
-            text="▶ Запустить процесс",
-            command=self.toggle_clicking,
-            bg="#27ae60",
-            fg="white",
-            font=("Segoe UI", 10, "bold"),
-            cursor="hand2",
-            padx=15,
-            pady=8,
-            relief="flat",
-            activebackground="#229954",
-            activeforeground="white"
-        )
-        self.start_stop_btn.grid(row=0, column=1, padx=8)
-        
-        # Отображение координат (компактное)
-        coord_display_frame = tk.Frame(main_content, bg="#ecf0f1", relief="solid", bd=1)
-        coord_display_frame.pack(fill="x", pady=5)
-        
-        self.coord_label = tk.Label(
-            coord_display_frame,
-            text="Координаты: не заданы",
-            font=("Segoe UI", 9, "bold"),
-            bg="#ecf0f1",
-            fg="#7f8c8d",
-            pady=6
-        )
-        self.coord_label.pack()
-        
-        # СЕКЦИЯ ЦЕПОЧКИ ДЕЙСТВИЙ (компактная)
-        chain_main_frame = tk.Frame(main_content, bg="#f0f0f0")
-        chain_main_frame.pack(pady=3, fill="both", expand=True)
-        
-        # Заголовок цепочки (компактный)
-        chain_title_frame = tk.Frame(chain_main_frame, bg="#ff9800", relief="flat", bd=0, height=30)
-        chain_title_frame.pack(fill="x")
-        chain_title_frame.pack_propagate(False)
-        
-        tk.Label(
-            chain_title_frame,
-            text="🔗 Цепочка действий",
-            font=("Segoe UI", 10, "bold"),
-            bg="#ff9800",
-            fg="white"
-        ).pack(pady=5)
-        
-        # Фрейм со списком и кнопками (компактный)
-        chain_content_frame = tk.Frame(chain_main_frame, bg="#fff8e1", relief="solid", bd=1)
-        chain_content_frame.pack(fill="both", expand=True)
-        
-        # Список действий с прокруткой (меньше)
-        list_frame = tk.Frame(chain_content_frame, bg="#fff8e1")
-        list_frame.pack(padx=5, pady=5, fill="both", expand=True)
-        
-        scrollbar = tk.Scrollbar(list_frame)
-        scrollbar.pack(side="right", fill="y")
-        
-        self.chain_listbox = tk.Listbox(
-            list_frame,
-            font=("Consolas", 8),
-            height=3,
-            yscrollcommand=scrollbar.set,
-            selectmode=tk.SINGLE,
-            bg="#ffffff",
-            fg="#2c3e50",
-            selectbackground="#3498db",
-            selectforeground="white",
-            relief="solid",
-            bd=1
-        )
-        self.chain_listbox.pack(side="left", fill="both", expand=True)
-        scrollbar.config(command=self.chain_listbox.yview)
-        
-        # Поля ввода в одной строке
-        input_row = tk.Frame(chain_content_frame, bg="#fff8e1")
-        input_row.pack(pady=3)
-        
-        tk.Label(
-            input_row,
-            text="Название:",
-            bg="#fff8e1",
-            font=("Segoe UI", 8, "bold"),
-            fg="#2c3e50"
-        ).grid(row=0, column=0, padx=3)
-        
-        self.step_name_var = tk.StringVar(value="Шаг 1")
-        step_name_entry = tk.Entry(
-            input_row,
-            textvariable=self.step_name_var,
-            width=15,
-            font=("Segoe UI", 8),
-            relief="solid",
-            bd=1
-        )
-        step_name_entry.grid(row=0, column=1, padx=3)
-        
-        tk.Label(
-            input_row,
-            text="Действие:",
-            bg="#fff8e1",
-            font=("Segoe UI", 8, "bold"),
-            fg="#2c3e50"
-        ).grid(row=0, column=2, padx=3)
-        
-        self.action_type = tk.StringVar(value="Клик левой")
-        action_combo = ttk.Combobox(
-            input_row,
-            textvariable=self.action_type,
-            values=["Клик левой", "Клик правой", "Клик средней", "Двойной клик"],
-            state="readonly",
-            width=13,
-            font=("Segoe UI", 8)
-        )
-        action_combo.grid(row=0, column=3, padx=3)
-        
-        # Кнопки управления (компактные)
-        buttons_row = tk.Frame(chain_content_frame, bg="#fff8e1")
-        buttons_row.pack(pady=4)
-        
-        tk.Button(
-            buttons_row,
-            text="➕ Добавить",
-            command=self.add_to_chain,
-            bg="#4caf50",
-            fg="white",
-            font=("Segoe UI", 8, "bold"),
-            cursor="hand2",
-            padx=8,
-            pady=4,
-            relief="flat",
-            activebackground="#45a049",
-            activeforeground="white"
-        ).grid(row=0, column=0, padx=3)
-        
-        tk.Button(
-            buttons_row,
-            text="❌ Удалить",
-            command=self.remove_from_chain,
-            bg="#f44336",
-            fg="white",
-            font=("Segoe UI", 8, "bold"),
-            cursor="hand2",
-            padx=8,
-            pady=4,
-            relief="flat",
-            activebackground="#da190b",
-            activeforeground="white"
-        ).grid(row=0, column=1, padx=3)
-        
-        tk.Button(
-            buttons_row,
-            text="🗑️ Очистить",
-            command=self.clear_chain,
-            bg="#757575",
-            fg="white",
-            font=("Segoe UI", 8, "bold"),
-            cursor="hand2",
-            padx=8,
-            pady=4,
-            relief="flat",
-            activebackground="#616161",
-            activeforeground="white"
-        ).grid(row=0, column=2, padx=3)
-        
-        # Настройки (компактные)
-        settings_frame = tk.Frame(main_content, bg="#ffffff", relief="solid", bd=1)
-        settings_frame.pack(pady=3, fill="x")
-        
-        settings_header = tk.Frame(settings_frame, bg="#34495e", height=25)
-        settings_header.pack(fill="x")
-        settings_header.pack_propagate(False)
-        
-        tk.Label(
-            settings_header,
-            text="⚙️ Настройки",
-            font=("Segoe UI", 9, "bold"),
-            bg="#34495e",
-            fg="white"
-        ).pack(pady=3)
-        
-        # Контент настроек (все в одной строке)
-        settings_content = tk.Frame(settings_frame, bg="#ffffff")
-        settings_content.pack(padx=5, pady=5)
-        
-        controls_frame = tk.Frame(settings_content, bg="#ffffff")
-        controls_frame.pack()
-        
-        # Интервал
-        tk.Label(
-            controls_frame, 
-            text="Интервал:",
-            bg="#ffffff",
-            font=("Segoe UI", 8, "bold"),
-            fg="#2c3e50"
-        ).grid(row=0, column=0, padx=3)
-        
-        self.interval_var = tk.DoubleVar(value=1.0)
-        interval_spinbox = tk.Spinbox(
-            controls_frame,
-            from_=0.1,
-            to=10.0,
-            increment=0.1,
-            textvariable=self.interval_var,
-            width=8,
-            font=("Segoe UI", 8),
-            relief="solid",
-            bd=1
-        )
-        interval_spinbox.grid(row=0, column=1, padx=3)
-        
-        # Кнопка мыши
-        tk.Label(
-            controls_frame,
-            text="Кнопка:",
-            bg="#ffffff",
-            font=("Segoe UI", 8, "bold"),
-            fg="#2c3e50"
-        ).grid(row=0, column=2, padx=3)
-        
-        self.click_type = tk.StringVar(value="left")
-        click_combo = ttk.Combobox(
-            controls_frame,
-            textvariable=self.click_type,
-            values=["left", "right", "middle"],
-            state="readonly",
-            width=8,
-            font=("Segoe UI", 8)
-        )
-        click_combo.grid(row=0, column=3, padx=3)
-        
-        # Кнопки сохранения и загрузки настроек
-        save_btn = tk.Button(
-            controls_frame,
-            text="💾 Сохранить",
-            command=self.save_settings,
-            bg="#9b59b6",
-            fg="white",
-            font=("Segoe UI", 8, "bold"),
-            cursor="hand2",
-            padx=8,
-            pady=4,
-            relief="flat",
-            activebackground="#8e44ad",
-            activeforeground="white"
-        )
-        save_btn.grid(row=0, column=4, padx=3)
-        
-        load_btn = tk.Button(
-            controls_frame,
-            text="📂 Загрузить",
-            command=self.load_settings_manual,
-            bg="#3498db",
-            fg="white",
-            font=("Segoe UI", 8, "bold"),
-            cursor="hand2",
-            padx=8,
-            pady=4,
-            relief="flat",
-            activebackground="#2980b9",
-            activeforeground="white"
-        )
-        load_btn.grid(row=0, column=5, padx=3)
-        
-        # Статус (компактный)
-        status_frame = tk.Frame(main_content, bg="#ecf0f1", relief="solid", bd=1, height=30)
-        status_frame.pack(fill="x", pady=3)
+        # Статус бар
+        status_frame = tk.Frame(self.root, bg="#34495e", height=35)
+        status_frame.pack(fill="x")
         status_frame.pack_propagate(False)
         
         self.status_label = tk.Label(
             status_frame,
-            text="⚫ Статус: Остановлено",
-            font=("Segoe UI", 9, "bold"),
-            fg="#95a5a6",
+            text="⚫ Готов | Ctrl - выбор координат | Двойной клик на квадрат - захват координат | F6 - запуск | Q - остановка",
+            font=("Segoe UI", 9),
+            fg="white",
+            bg="#34495e"
+        )
+        self.status_label.pack(pady=8)
+        
+        # Привязки событий
+        self.canvas.bind("<Button-1>", self.on_canvas_click)
+        self.canvas.bind("<Double-Button-1>", self.on_canvas_double_click)
+        self.canvas.bind("<B1-Motion>", self.on_canvas_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_canvas_release)
+        self.canvas.bind("<Button-3>", self.on_right_click)  # Правый клик для удаления
+        
+        # Загрузка сохраненного потока
+        self.load_flow_silent()
+    
+    def draw_grid(self):
+        """Рисование сетки на canvas"""
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+        
+        if width <= 1:
+            width = 1200
+        if height <= 1:
+            height = 700
+        
+        # Вертикальные линии
+        for i in range(0, width, 40):
+            self.canvas.create_line(i, 0, i, height, fill="#ecf0f1", tags="grid")
+        
+        # Горизонтальные линии
+        for i in range(0, height, 40):
+            self.canvas.create_line(0, i, width, i, fill="#ecf0f1", tags="grid")
+        
+        self.canvas.tag_lower("grid")
+    
+    def add_coordinate_block(self):
+        """Добавление блока координат"""
+        block = CoordinateBlock(self.canvas, 100 + len(self.blocks) * 20, 100 + len(self.blocks) * 20, self.next_block_id)
+        self.blocks.append(block)
+        self.next_block_id += 1
+        self.status_label.config(text=f"✅ Добавлен блок координат #{block.id}")
+    
+    def add_click_block(self, click_type):
+        """Добавление блока клика"""
+        block = ClickBlock(self.canvas, 300 + len(self.blocks) * 20, 100 + len(self.blocks) * 20, self.next_block_id, click_type)
+        self.blocks.append(block)
+        self.next_block_id += 1
+        labels = {'left': 'левый', 'right': 'правый', 'middle': 'средний'}
+        self.status_label.config(text=f"✅ Добавлен блок {labels[click_type]} клик #{block.id}")
+    
+    def add_repeat_block(self):
+        """Добавление блока повторений"""
+        # Диалог для ввода количества повторов
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Количество повторов")
+        dialog.geometry("300x150")
+        dialog.configure(bg="#ecf0f1")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(
+            dialog,
+            text="Сколько раз повторить?",
+            font=("Segoe UI", 11, "bold"),
             bg="#ecf0f1"
+        ).pack(pady=15)
+        
+        repeat_var = tk.IntVar(value=5)
+        spinbox = tk.Spinbox(
+            dialog,
+            from_=1,
+            to=1000,
+            textvariable=repeat_var,
+            width=10,
+            font=("Segoe UI", 11)
         )
-        self.status_label.pack(pady=6)
+        spinbox.pack(pady=10)
+        spinbox.focus()
         
-        # Панель с горячими клавишами (компактная)
-        hotkeys_frame = tk.Frame(main_content, bg="#e8f5e9", relief="solid", bd=1)
-        hotkeys_frame.pack(fill="x", pady=2)
+        def on_ok():
+            count = repeat_var.get()
+            block = RepeatBlock(self.canvas, 100 + len(self.blocks) * 20, 200 + len(self.blocks) * 20, self.next_block_id, count)
+            self.blocks.append(block)
+            self.next_block_id += 1
+            self.status_label.config(text=f"✅ Добавлен блок повторений ({count}x) #{block.id}")
+            dialog.destroy()
         
-        hotkeys_info = tk.Label(
-            hotkeys_frame,
-            text="⌨️ F6 - Старт/Стоп | Q - Остановка | Угол экрана - Экстренная остановка",
-            font=("Segoe UI", 8, "bold"),
-            bg="#e8f5e9",
-            fg="#1b5e20"
+        tk.Button(
+            dialog,
+            text="✅ Добавить",
+            command=on_ok,
+            bg="#27ae60",
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            cursor="hand2",
+            padx=20,
+            pady=5
+        ).pack(pady=10)
+    
+    def add_delay_block(self):
+        """Добавление блока задержки"""
+        # Диалог для ввода времени задержки
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Задержка")
+        dialog.geometry("300x150")
+        dialog.configure(bg="#ecf0f1")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(
+            dialog,
+            text="Задержка в секундах:",
+            font=("Segoe UI", 11, "bold"),
+            bg="#ecf0f1"
+        ).pack(pady=15)
+        
+        delay_var = tk.DoubleVar(value=1.0)
+        spinbox = tk.Spinbox(
+            dialog,
+            from_=0.1,
+            to=60.0,
+            increment=0.1,
+            textvariable=delay_var,
+            width=10,
+            font=("Segoe UI", 11)
         )
-        hotkeys_info.pack(pady=3)
+        spinbox.pack(pady=10)
+        spinbox.focus()
         
-    def select_position(self):
-        """Запуск процесса выбора позиции"""
-        if self.waiting_for_click:
-            messagebox.showinfo(
-                "Информация",
-                "Уже ожидается выбор позиции!"
-            )
+        def on_ok():
+            delay = delay_var.get()
+            block = DelayBlock(self.canvas, 300 + len(self.blocks) * 20, 200 + len(self.blocks) * 20, self.next_block_id, delay)
+            self.blocks.append(block)
+            self.next_block_id += 1
+            self.status_label.config(text=f"✅ Добавлен блок задержки ({delay} сек) #{block.id}")
+            dialog.destroy()
+        
+        tk.Button(
+            dialog,
+            text="✅ Добавить",
+            command=on_ok,
+            bg="#27ae60",
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            cursor="hand2",
+            padx=20,
+            pady=5
+        ).pack(pady=10)
+    
+    def add_group_block(self, group_type):
+        """Добавление блока группы"""
+        block = GroupBlock(self.canvas, 100 + len(self.blocks) * 20, 150 + len(self.blocks) * 20, self.next_block_id, group_type)
+        self.blocks.append(block)
+        self.next_block_id += 1
+        label = "начало" if group_type == 'start' else "конец"
+        self.status_label.config(text=f"✅ Добавлен блок {label} группы #{block.id}")
+    
+    def add_keyboard_input_block(self):
+        """Добавление блока ввода текста"""
+        # Диалог для ввода текста
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Ввод текста с клавиатуры")
+        dialog.geometry("400x200")
+        dialog.configure(bg="#ecf0f1")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(
+            dialog,
+            text="Текст для ввода:",
+            font=("Segoe UI", 11, "bold"),
+            bg="#ecf0f1"
+        ).pack(pady=10)
+        
+        text_var = tk.StringVar(value="")
+        entry = tk.Entry(
+            dialog,
+            textvariable=text_var,
+            width=35,
+            font=("Segoe UI", 11)
+        )
+        entry.pack(pady=10)
+        entry.focus()
+        
+        # Checkbox для нажатия Enter
+        enter_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            dialog,
+            text="Нажать Enter после ввода",
+            variable=enter_var,
+            font=("Segoe UI", 10),
+            bg="#ecf0f1"
+        ).pack(pady=10)
+        
+        def on_ok():
+            text = text_var.get()
+            press_enter = enter_var.get()
+            block = KeyboardInputBlock(self.canvas, 200 + len(self.blocks) * 20, 100 + len(self.blocks) * 20, self.next_block_id, text, press_enter)
+            self.blocks.append(block)
+            self.next_block_id += 1
+            self.status_label.config(text=f"✅ Добавлен блок ввода текста #{block.id}")
+            dialog.destroy()
+        
+        tk.Button(
+            dialog,
+            text="✅ Добавить",
+            command=on_ok,
+            bg="#27ae60",
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            cursor="hand2",
+            padx=20,
+            pady=5
+        ).pack(pady=10)
+    
+    def start_coordinate_selection(self):
+        """Захват координат по Ctrl - одним нажатием"""
+        # Если в режиме пакетного задания координат
+        if self.batch_coordinate_mode:
+            self.capture_next_batch_coordinate()
             return
         
-        self.waiting_for_click = True
-        self.select_btn.config(state="disabled", bg="#95a5a6", text="⏳ Ожидание клика...")
-        
-        messagebox.showinfo(
-            "📍 Выбор позиции",
-            "Наведите курсор на нужное место\nи нажмите ЛЕВУЮ кнопку мыши\n\n✅ Координаты будут запомнены!"
-        )
-        
-        # Запускаем слушатель мыши
-        def on_click(x, y, button, pressed):
-            if pressed and button == mouse.Button.left and self.waiting_for_click:
-                self.click_x, self.click_y = x, y
-                self.root.after(0, lambda: self.coord_label.config(
-                    text=f"✅ Координаты: X={self.click_x}, Y={self.click_y}",
-                    fg="#27ae60"
-                ))
-                self.root.after(0, lambda: self.select_btn.config(
-                    state="normal", 
-                    bg="#3498db",
-                    text="📍 Задать координаты"
-                ))
-                self.waiting_for_click = False
-                # Останавливаем слушатель
-                return False
-        
-        # Создаём и запускаем слушатель в отдельном потоке
-        def start_listener():
-            with mouse.Listener(on_click=on_click) as listener:
-                listener.join()
-        
-        thread = threading.Thread(target=start_listener, daemon=True)
-        thread.start()
-        
-    def toggle_clicking(self):
-        """Переключение режима кликов"""
-        if not self.is_clicking:
-            # Если есть цепочка - используем её, иначе одиночный клик
-            if len(self.action_chain) > 0:
-                self.start_clicking()
-            elif self.click_x is None or self.click_y is None:
-                messagebox.showwarning(
-                    "Внимание",
-                    "Сначала выберите позицию для клика или создайте цепочку действий!"
-                )
-                return
-            else:
-                self.start_clicking()
+        # Проверяем есть ли выбранный блок координат
+        if self.selected_block and isinstance(self.selected_block, CoordinateBlock):
+            # Сразу получаем текущие координаты курсора
+            x, y = pyautogui.position()
+            self.selected_block.update_coordinates(x, y)
+            self.status_label.config(text=f"✅ Координаты установлены: X={x}, Y={y} для блока #{self.selected_block.id}")
         else:
-            self.stop_clicking()
+            self.status_label.config(text="⚠️ Сначала выберите блок координат (кликните на синий квадрат 📍)")
+    
+    def on_canvas_double_click(self, event):
+        """Двойной клик - быстрый захват координат или редактирование параметров"""
+        # Сначала проверяем клик по соединению (стрелке)
+        clicked_connection = self.get_connection_at_position(event.x, event.y)
+        if clicked_connection:
+            # Редактирование задержки на соединении
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Задержка на переходе")
+            dialog.geometry("300x150")
+            dialog.configure(bg="#ecf0f1")
+            dialog.transient(self.root)
+            dialog.grab_set()
             
-    def start_clicking(self):
-        """Запуск автоматических кликов"""
-        self.is_clicking = True
-        self.start_stop_btn.config(
-            text="⏸ Остановить процесс",
-            bg="#e74c3c"
-        )
-        self.status_label.config(
-            text="🟢 Статус: Работает",
-            fg="#27ae60"
-        )
-        self.select_btn.config(state="disabled")
-        
-        # Запуск потока кликов
-        self.click_thread = threading.Thread(target=self.clicking_loop, daemon=True)
-        self.click_thread.start()
-        
-    def stop_clicking(self):
-        """Остановка автоматических кликов"""
-        self.is_clicking = False
-        self.start_stop_btn.config(
-            text="▶ Запустить процесс",
-            bg="#27ae60"
-        )
-        self.status_label.config(
-            text="⚫ Статус: Остановлено",
-            fg="#95a5a6"
-        )
-        self.select_btn.config(state="normal")
-        
-    def clicking_loop(self):
-        """Основной цикл кликов"""
-        while self.is_clicking:
-            try:
-                # Если есть цепочка - выполняем её
-                if len(self.action_chain) > 0:
-                    for action in self.action_chain:
-                        if not self.is_clicking:
-                            break
-                        
-                        action_type = action.get('action_type', 'Клик левой')
-                        x = action['x']
-                        y = action['y']
-                        button = action['button']
-                        
-                        # Выполняем действие в зависимости от типа
-                        if action_type == "Двойной клик":
-                            pyautogui.doubleClick(x, y, button=button)
-                        else:
-                            pyautogui.click(x, y, button=button)
-                        
-                        time.sleep(self.interval_var.get())
-                else:
-                    # Одиночный клик
-                    pyautogui.click(
-                        self.click_x, 
-                        self.click_y, 
-                        button=self.click_type.get()
-                    )
-                    time.sleep(self.interval_var.get())
-            except pyautogui.FailSafeException:
-                # Экстренная остановка при перемещении курсора в угол
-                self.root.after(0, self.stop_clicking)
-                self.root.after(0, lambda: messagebox.showinfo(
-                    "Экстренная остановка",
-                    "Клики остановлены (курсор в углу экрана)"
-                ))
-                break
-            except Exception as e:
-                self.root.after(0, self.stop_clicking)
-                self.root.after(0, lambda: messagebox.showerror(
-                    "Ошибка",
-                    f"Произошла ошибка: {str(e)}"
-                ))
-                break
-                
-    def emergency_stop(self):
-        """Экстренная остановка по нажатию Q"""
-        if self.is_clicking:
-            self.stop_clicking()
-    
-    def add_to_chain(self):
-        """Добавление текущих координат в цепочку"""
-        if self.click_x is None or self.click_y is None:
-            messagebox.showwarning(
-                "Внимание",
-                "Сначала задайте координаты!\n\nНажмите '📍 Задать координаты' и выберите точку на экране."
+            tk.Label(
+                dialog,
+                text="Задержка (секунды):",
+                font=("Segoe UI", 11, "bold"),
+                bg="#ecf0f1"
+            ).pack(pady=15)
+            
+            delay_var = tk.DoubleVar(value=clicked_connection.delay)
+            spinbox = tk.Spinbox(
+                dialog,
+                from_=0.0,
+                to=60.0,
+                increment=0.1,
+                textvariable=delay_var,
+                width=10,
+                font=("Segoe UI", 11)
             )
+            spinbox.pack(pady=10)
+            spinbox.focus()
+            
+            def on_ok():
+                clicked_connection.delay = delay_var.get()
+                clicked_connection.update()
+                self.status_label.config(text=f"✅ Задержка установлена: {delay_var.get()} сек")
+                dialog.destroy()
+            
+            tk.Button(
+                dialog,
+                text="✅ Сохранить",
+                command=on_ok,
+                bg="#27ae60",
+                fg="white",
+                font=("Segoe UI", 10, "bold"),
+                cursor="hand2",
+                padx=20,
+                pady=5
+            ).pack(pady=10)
             return
         
-        # Определяем кнопку мыши из типа действия
-        action_type = self.action_type.get()
-        if action_type == "Клик левой":
-            button = "left"
-        elif action_type == "Клик правой":
-            button = "right"
-        elif action_type == "Клик средней":
-            button = "middle"
-        elif action_type == "Двойной клик":
-            button = "left"  # Для двойного клика используем левую
+        # Проверяем клик по блокам
+        clicked_block = self.get_block_at_position(event.x, event.y)
+        
+        if clicked_block and isinstance(clicked_block, CoordinateBlock):
+            # Получаем текущие координаты мыши
+            x, y = pyautogui.position()
+            clicked_block.update_coordinates(x, y)
+            self.selected_block = clicked_block
+            self.status_label.config(text=f"✅ Двойной клик! Координаты: X={x}, Y={y} для блока #{clicked_block.id}")
+        
+        elif clicked_block and isinstance(clicked_block, RepeatBlock):
+            # Редактирование количества повторов
+            dialog = tk.Toplevel(self.root)
+            dialog.title(f"Редактировать блок #{clicked_block.id}")
+            dialog.geometry("300x150")
+            dialog.configure(bg="#ecf0f1")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            tk.Label(
+                dialog,
+                text="Сколько раз повторить?",
+                font=("Segoe UI", 11, "bold"),
+                bg="#ecf0f1"
+            ).pack(pady=15)
+            
+            repeat_var = tk.IntVar(value=clicked_block.data['repeat_count'])
+            spinbox = tk.Spinbox(
+                dialog,
+                from_=1,
+                to=1000,
+                textvariable=repeat_var,
+                width=10,
+                font=("Segoe UI", 11)
+            )
+            spinbox.pack(pady=10)
+            spinbox.select_range(0, tk.END)
+            spinbox.focus()
+            
+            def on_ok():
+                clicked_block.update_repeat_count(repeat_var.get())
+                self.status_label.config(text=f"✅ Блок #{clicked_block.id} обновлен: {repeat_var.get()} повторов")
+                dialog.destroy()
+            
+            tk.Button(
+                dialog,
+                text="✅ Сохранить",
+                command=on_ok,
+                bg="#27ae60",
+                fg="white",
+                font=("Segoe UI", 10, "bold"),
+                cursor="hand2",
+                padx=20,
+                pady=5
+            ).pack(pady=10)
+        
+        elif clicked_block and isinstance(clicked_block, DelayBlock):
+            # Редактирование задержки
+            dialog = tk.Toplevel(self.root)
+            dialog.title(f"Редактировать блок #{clicked_block.id}")
+            dialog.geometry("300x150")
+            dialog.configure(bg="#ecf0f1")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            tk.Label(
+                dialog,
+                text="Задержка в секундах:",
+                font=("Segoe UI", 11, "bold"),
+                bg="#ecf0f1"
+            ).pack(pady=15)
+            
+            delay_var = tk.DoubleVar(value=clicked_block.data['delay'])
+            spinbox = tk.Spinbox(
+                dialog,
+                from_=0.1,
+                to=60.0,
+                increment=0.1,
+                textvariable=delay_var,
+                width=10,
+                font=("Segoe UI", 11)
+            )
+            spinbox.pack(pady=10)
+            spinbox.select_range(0, tk.END)
+            spinbox.focus()
+            
+            def on_ok():
+                clicked_block.update_delay(delay_var.get())
+                self.status_label.config(text=f"✅ Блок #{clicked_block.id} обновлен: {delay_var.get()} сек")
+                dialog.destroy()
+            
+            tk.Button(
+                dialog,
+                text="✅ Сохранить",
+                command=on_ok,
+                bg="#27ae60",
+                fg="white",
+                font=("Segoe UI", 10, "bold"),
+                cursor="hand2",
+                padx=20,
+                pady=5
+            ).pack(pady=10)
+        
+        elif clicked_block and isinstance(clicked_block, GroupBlock):
+            # Редактирование названия группы
+            dialog = tk.Toplevel(self.root)
+            dialog.title(f"Редактировать группу #{clicked_block.id}")
+            dialog.geometry("350x150")
+            dialog.configure(bg="#ecf0f1")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            tk.Label(
+                dialog,
+                text="Название группы:",
+                font=("Segoe UI", 11, "bold"),
+                bg="#ecf0f1"
+            ).pack(pady=15)
+            
+            name_var = tk.StringVar(value=clicked_block.data['name'])
+            entry = tk.Entry(
+                dialog,
+                textvariable=name_var,
+                width=25,
+                font=("Segoe UI", 11)
+            )
+            entry.pack(pady=10)
+            entry.select_range(0, tk.END)
+            entry.focus()
+            
+            def on_ok():
+                clicked_block.update_name(name_var.get())
+                self.status_label.config(text=f"✅ Группа #{clicked_block.id} переименована: {name_var.get()}")
+                dialog.destroy()
+            
+            tk.Button(
+                dialog,
+                text="✅ Сохранить",
+                command=on_ok,
+                bg="#27ae60",
+                fg="white",
+                font=("Segoe UI", 10, "bold"),
+                cursor="hand2",
+                padx=20,
+                pady=5
+            ).pack(pady=10)
+        
+        elif clicked_block and isinstance(clicked_block, KeyboardInputBlock):
+            # Редактирование текста для ввода
+            dialog = tk.Toplevel(self.root)
+            dialog.title(f"Редактировать блок #{clicked_block.id}")
+            dialog.geometry("400x200")
+            dialog.configure(bg="#ecf0f1")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            tk.Label(
+                dialog,
+                text="Текст для ввода:",
+                font=("Segoe UI", 11, "bold"),
+                bg="#ecf0f1"
+            ).pack(pady=10)
+            
+            text_var = tk.StringVar(value=clicked_block.data['text'])
+            entry = tk.Entry(
+                dialog,
+                textvariable=text_var,
+                width=35,
+                font=("Segoe UI", 11)
+            )
+            entry.pack(pady=10)
+            entry.select_range(0, tk.END)
+            entry.focus()
+            
+            # Checkbox для нажатия Enter
+            enter_var = tk.BooleanVar(value=clicked_block.data['press_enter'])
+            tk.Checkbutton(
+                dialog,
+                text="Нажать Enter после ввода",
+                variable=enter_var,
+                font=("Segoe UI", 10),
+                bg="#ecf0f1"
+            ).pack(pady=10)
+            
+            def on_ok():
+                clicked_block.update_text(text_var.get(), enter_var.get())
+                self.status_label.config(text=f"✅ Блок #{clicked_block.id} обновлен")
+                dialog.destroy()
+            
+            tk.Button(
+                dialog,
+                text="✅ Сохранить",
+                command=on_ok,
+                bg="#27ae60",
+                fg="white",
+                font=("Segoe UI", 10, "bold"),
+                cursor="hand2",
+                padx=20,
+                pady=5
+            ).pack(pady=10)
+    
+    def start_batch_coordinate_mode(self):
+        """Запуск режима пакетного задания координат"""
+        # Если уже в режиме - отменяем
+        if self.batch_coordinate_mode:
+            self.batch_coordinate_mode = False
+            self.batch_coord_btn.config(bg="#9b59b6", text="🎯 Задать все координаты")
+            self.status_label.config(text="❌ Режим пакетного задания отменен")
+            self.batch_coord_blocks = []
+            self.batch_coord_index = 0
+            return
+        
+        # Находим все блоки координат без заданных координат
+        coord_blocks = [b for b in self.blocks if isinstance(b, CoordinateBlock)]
+        
+        if not coord_blocks:
+            messagebox.showinfo("Информация", "Нет блоков координат! Добавьте блоки 📍 Координата")
+            return
+        
+        # Фильтруем только блоки без координат или берем все
+        empty_blocks = [b for b in coord_blocks if b.data['x'] is None or b.data['y'] is None]
+        
+        if not empty_blocks:
+            # Если все заданы, предлагаем переназначить все
+            result = messagebox.askyesno(
+                "Все координаты заданы",
+                f"Все {len(coord_blocks)} блоков уже имеют координаты.\n\nПереназначить все координаты заново?"
+            )
+            if result:
+                self.batch_coord_blocks = coord_blocks
+            else:
+                return
         else:
-            button = "left"
+            self.batch_coord_blocks = empty_blocks
         
-        action = {
-            'name': self.step_name_var.get(),
-            'x': self.click_x,
-            'y': self.click_y,
-            'action_type': action_type,
-            'button': button
-        }
+        self.batch_coord_index = 0
+        self.batch_coordinate_mode = True
         
-        self.action_chain.append(action)
-        self.update_chain_display()
+        # Меняем внешний вид кнопки
+        self.batch_coord_btn.config(bg="#e74c3c", text="❌ Отменить режим")
         
-        # Автоматически увеличиваем номер шага
-        current_name = self.step_name_var.get()
-        if "Шаг" in current_name:
-            try:
-                parts = current_name.split()
-                if len(parts) >= 2 and parts[-1].isdigit():
-                    num = int(parts[-1]) + 1
-                    self.step_name_var.set(f"Шаг {num}")
-            except:
-                pass
+        # Выделяем первый блок
+        self.selected_block = self.batch_coord_blocks[0]
+        self.highlight_current_batch_block()
         
         messagebox.showinfo(
-            "Успех",
-            f"✅ Действие добавлено!\n\n'{action['name']}'\nВсего в цепочке: {len(self.action_chain)}"
+            "Режим пакетного задания",
+            f"📍 Будет задано {len(self.batch_coord_blocks)} координат\n\n"
+            f"Для каждого блока:\n"
+            f"1. Наведите курсор куда нужно\n"
+            f"2. Нажмите Ctrl\n\n"
+            f"Начинаем с блока #{self.batch_coord_blocks[0].id}"
         )
     
-    def remove_from_chain(self):
-        """Удаление выбранного действия из цепочки"""
-        selection = self.chain_listbox.curselection()
-        if not selection:
-            messagebox.showwarning(
-                "Внимание",
-                "Выберите действие из списка для удаления!"
+    def highlight_current_batch_block(self):
+        """Подсветка текущего блока в пакетном режиме"""
+        if self.batch_coord_index < len(self.batch_coord_blocks):
+            current_block = self.batch_coord_blocks[self.batch_coord_index]
+        self.status_label.config(
+                text=f"🎯 Режим пакетного задания | Блок {self.batch_coord_index + 1}/{len(self.batch_coord_blocks)} (#{current_block.id}) | Наведите курсор и нажмите Ctrl"
             )
+    
+    def capture_next_batch_coordinate(self):
+        """Захват координат для следующего блока в пакетном режиме"""
+        if self.batch_coord_index < len(self.batch_coord_blocks):
+            current_block = self.batch_coord_blocks[self.batch_coord_index]
+            x, y = pyautogui.position()
+            current_block.update_coordinates(x, y)
+            
+            self.batch_coord_index += 1
+            
+            # Проверяем, есть ли еще блоки
+            if self.batch_coord_index < len(self.batch_coord_blocks):
+                self.selected_block = self.batch_coord_blocks[self.batch_coord_index]
+                self.highlight_current_batch_block()
+            else:
+                # Закончили
+                self.finish_batch_coordinate_mode()
+    
+    def finish_batch_coordinate_mode(self):
+        """Завершение режима пакетного задания"""
+        self.batch_coordinate_mode = False
+        self.batch_coord_btn.config(bg="#9b59b6", text="🎯 Задать все координаты")
+        messagebox.showinfo(
+            "Готово!",
+            f"✅ Все координаты заданы!\n\n"
+            f"Задано блоков: {len(self.batch_coord_blocks)}"
+        )
+        self.status_label.config(text="✅ Пакетное задание координат завершено!")
+        self.batch_coord_blocks = []
+        self.batch_coord_index = 0
+    
+    def toggle_connection_mode(self):
+        """Переключение режима соединения"""
+        self.connection_mode = not self.connection_mode
+        if self.connection_mode:
+            self.connect_btn.config(bg="#e74c3c", text="🔗 Режим соединения")
+            self.status_label.config(text="🔗 Выберите первый блок, затем второй для соединения")
+            self.connection_start_block = None
+        else:
+            self.connect_btn.config(bg="#9b59b6", text="🔗 Соединить")
+            self.status_label.config(text="⚫ Режим соединения выключен")
+            self.connection_start_block = None
+    
+    def on_canvas_click(self, event):
+        """Клик на canvas"""
+        # Проверяем режим соединения
+        if self.connection_mode:
+            clicked_block = self.get_block_at_position(event.x, event.y)
+            if clicked_block:
+                if self.connection_start_block is None:
+                    self.connection_start_block = clicked_block
+                    self.status_label.config(text=f"🔗 Выбран блок #{clicked_block.id}, выберите второй блок")
+                else:
+                    # Создаем соединение
+                    if self.connection_start_block != clicked_block:
+                        connection = Connection(self.canvas, self.connection_start_block, clicked_block)
+                        self.connections.append(connection)
+                        self.connection_start_block.connections_out.append(clicked_block)
+                        clicked_block.connections_in.append(self.connection_start_block)
+                        self.status_label.config(text=f"✅ Соединение создано: #{self.connection_start_block.id} → #{clicked_block.id}")
+                    self.connection_start_block = None
+                    self.connection_mode = False
+                    self.connect_btn.config(bg="#9b59b6", text="🔗 Соединить")
             return
         
-        index = selection[0]
-        del self.action_chain[index]
-        self.update_chain_display()
-        
-        messagebox.showinfo(
-            "Удалено",
-            f"❌ Действие удалено!\n\nОсталось в цепочке: {len(self.action_chain)}"
-        )
+        # Обычный режим - выбор блока
+        clicked_block = self.get_block_at_position(event.x, event.y)
+        if clicked_block:
+            self.selected_block = clicked_block
+            self.drag_data["x"] = event.x
+            self.drag_data["y"] = event.y
+            self.drag_data["block"] = clicked_block
+            
+            block_type = "Координата" if isinstance(clicked_block, CoordinateBlock) else "Клик"
+            self.status_label.config(text=f"📌 Выбран блок #{clicked_block.id} ({block_type})")
+        else:
+            self.selected_block = None
     
-    def clear_chain(self):
-        """Очистка всей цепочки"""
-        if len(self.action_chain) == 0:
-            messagebox.showinfo(
-                "Информация",
-                "Цепочка уже пуста!"
-            )
+    def on_canvas_drag(self, event):
+        """Перетаскивание блока"""
+        if self.drag_data["block"]:
+            dx = event.x - self.drag_data["x"]
+            dy = event.y - self.drag_data["y"]
+            self.drag_data["block"].move(dx, dy)
+            self.drag_data["x"] = event.x
+            self.drag_data["y"] = event.y
+            
+            # Обновляем соединения
+            self.update_connections()
+    
+    def on_canvas_release(self, event):
+        """Отпускание кнопки мыши"""
+        self.drag_data["block"] = None
+    
+    def on_right_click(self, event):
+        """Правый клик - удаление блока"""
+        clicked_block = self.get_block_at_position(event.x, event.y)
+        if clicked_block:
+            # Удаляем все соединения связанные с блоком
+            connections_to_remove = []
+            for conn in self.connections:
+                if conn.from_block == clicked_block or conn.to_block == clicked_block:
+                    conn.delete()
+                    connections_to_remove.append(conn)
+            
+            for conn in connections_to_remove:
+                self.connections.remove(conn)
+            
+            # Удаляем блок
+            clicked_block.delete()
+            self.blocks.remove(clicked_block)
+            self.status_label.config(text=f"🗑️ Блок #{clicked_block.id} удален")
+            
+            if self.selected_block == clicked_block:
+                self.selected_block = None
+    
+    def get_block_at_position(self, x, y):
+        """Получение блока в позиции"""
+        for block in reversed(self.blocks):  # Проверяем с конца (верхние блоки)
+            if block.contains_point(x, y):
+                return block
+        return None
+    
+    def get_connection_at_position(self, x, y):
+        """Получение соединения в позиции"""
+        for conn in self.connections:
+            if conn.contains_point(x, y):
+                return conn
+        return None
+    
+    def update_connections(self):
+        """Обновление всех соединений"""
+        for conn in self.connections:
+            conn.update()
+    
+    def clear_canvas(self):
+        """Очистка canvas"""
+        if not self.blocks:
+            messagebox.showinfo("Информация", "Canvas уже пуст!")
             return
         
         result = messagebox.askyesno(
             "Подтверждение",
-            f"Удалить все {len(self.action_chain)} действий из цепочки?"
+            f"Удалить все {len(self.blocks)} блоков и {len(self.connections)} соединений?"
         )
         
         if result:
-            self.action_chain.clear()
-            self.update_chain_display()
-            messagebox.showinfo(
-                "Очищено",
-                "🗑️ Вся цепочка очищена!"
-            )
+            for block in self.blocks:
+                block.delete()
+            for conn in self.connections:
+                conn.delete()
+            self.blocks.clear()
+            self.connections.clear()
+            self.selected_block = None
+            self.status_label.config(text="🗑️ Canvas очищен")
     
-    def update_chain_display(self):
-        """Обновление отображения цепочки"""
-        self.chain_listbox.delete(0, tk.END)
-        for i, action in enumerate(self.action_chain, 1):
-            # Получаем иконку действия
-            action_type = action.get('action_type', 'Клик левой')
-            if action_type == "Клик левой":
-                icon = "👆"
-            elif action_type == "Клик правой":
-                icon = "👉"
-            elif action_type == "Клик средней":
-                icon = "☝️"
-            elif action_type == "Двойной клик":
-                icon = "👆👆"
-            else:
-                icon = "🖱️"
-            
-            name = action.get('name', f'Шаг {i}')
-            x = action['x']
-            y = action['y']
-            
-            self.chain_listbox.insert(
-                tk.END,
-                f"{icon} {name} → X:{x}, Y:{y}"
-            )
+    def toggle_execution(self):
+        """Переключение выполнения"""
+        if not self.is_running:
+            self.start_execution()
+        else:
+            self.stop_execution()
     
-    def save_settings(self):
-        """Сохранение настроек в файл"""
-        settings = {
-            "click_x": self.click_x,
-            "click_y": self.click_y,
-            "interval": self.interval_var.get(),
-            "click_type": self.click_type.get(),
-            "action_chain": self.action_chain  # Сохраняем цепочку действий
+    def start_execution(self):
+        """Запуск выполнения потока"""
+        if not self.blocks:
+            messagebox.showwarning("Предупреждение", "Нет блоков для выполнения!")
+            return
+        
+        # Находим начальные блоки (без входящих соединений)
+        start_blocks = [block for block in self.blocks if not block.connections_in]
+        
+        if not start_blocks:
+            messagebox.showwarning("Предупреждение", "Нет начальных блоков! Добавьте блок без входящих соединений.")
+            return
+        
+        self.is_running = True
+        self.run_btn.config(text="⏸ Остановить", bg="#e74c3c")
+        self.status_label.config(text="🟢 Выполнение запущено...")
+        
+        # Запускаем в отдельном потоке
+        thread = threading.Thread(target=self.execute_flow, args=(start_blocks,), daemon=True)
+        thread.start()
+    
+    def stop_execution(self):
+        """Остановка выполнения"""
+        self.is_running = False
+        self.run_btn.config(text="▶ Запустить", bg="#27ae60")
+        self.status_label.config(text="⚫ Выполнение остановлено")
+    
+    def emergency_stop(self):
+        """Экстренная остановка"""
+        if self.is_running:
+            self.stop_execution()
+            messagebox.showinfo("Остановка", "Выполнение экстренно остановлено!")
+    
+    def execute_flow(self, start_blocks):
+        """Выполнение потока"""
+        try:
+            def get_connection_delay(from_block, to_block):
+                """Получить задержку на соединении между блоками"""
+                for conn in self.connections:
+                    if conn.from_block == from_block and conn.to_block == to_block:
+                        return conn.delay
+                return 0.0
+            
+            def execute_block(block, context=None):
+                if not self.is_running:
+                    return
+                
+                if context is None:
+                    context = {'coordinates': None, 'repeat_count': 1}
+                
+                # Выполняем действие в зависимости от типа блока
+                if isinstance(block, CoordinateBlock):
+                    # Блок координат - сохраняем координаты в контекст
+                    x, y = block.data.get('x'), block.data.get('y')
+                    if x is None or y is None:
+                        self.root.after(0, lambda b=block: messagebox.showerror(
+                "Ошибка",
+                            f"Блок #{b.id}: координаты не заданы!"
+                        ))
+                        self.stop_execution()
+                        return
+                    
+                    context['coordinates'] = (x, y)
+                    self.root.after(0, lambda b=block: self.status_label.config(
+                        text=f"📍 Блок #{b.id}: координаты установлены ({x}, {y})"
+                    ))
+                    
+                    # Выполняем следующие блоки с задержкой на соединении
+                    for next_block in block.connections_out:
+                        if not self.is_running:
+                            break
+                        # Применяем задержку из соединения
+                        delay = get_connection_delay(block, next_block)
+                        if delay > 0:
+                            time.sleep(delay)
+                        execute_block(next_block, context.copy())
+                
+                elif isinstance(block, ClickBlock):
+                    # Блок клика - выполняем клик по координатам из контекста
+                    coords = context.get('coordinates')
+                    if coords:
+                        x, y = coords
+                        click_type = block.data['click_type']
+                        pyautogui.click(x, y, button=click_type)
+                        self.root.after(0, lambda b=block: self.status_label.config(
+                            text=f"🖱️ Блок #{b.id}: {click_type} клик в ({x}, {y})"
+                        ))
+                    else:
+                        # Ищем координаты из входящих блоков
+                        for in_block in block.connections_in:
+                            if isinstance(in_block, CoordinateBlock):
+                                x, y = in_block.data.get('x'), in_block.data.get('y')
+                                if x is not None and y is not None:
+                                    click_type = block.data['click_type']
+                                    pyautogui.click(x, y, button=click_type)
+                                    context['coordinates'] = (x, y)
+                                    self.root.after(0, lambda b=block: self.status_label.config(
+                                        text=f"🖱️ Блок #{b.id}: {click_type} клик в ({x}, {y})"
+                                    ))
+                                    break
+                    
+                    time.sleep(0.3)
+                    
+                    # Выполняем следующие блоки
+                    for next_block in block.connections_out:
+                        if not self.is_running:
+                            break
+                        execute_block(next_block, context.copy())
+                
+                elif isinstance(block, DelayBlock):
+                    # Блок задержки - ждем указанное время
+                    delay = block.data['delay']
+                    self.root.after(0, lambda b=block, d=delay: self.status_label.config(
+                        text=f"⏱️ Блок #{b.id}: задержка {d} сек..."
+                    ))
+                    time.sleep(delay)
+                    
+                    # Выполняем следующие блоки
+                    for next_block in block.connections_out:
+                        if not self.is_running:
+                            break
+                        execute_block(next_block, context.copy())
+                
+                elif isinstance(block, RepeatBlock):
+                    # Блок повторений - повторяем следующие блоки N раз
+                    repeat_count = block.data['repeat_count']
+                    self.root.after(0, lambda b=block, r=repeat_count: self.status_label.config(
+                        text=f"🔄 Блок #{b.id}: повторение {r} раз..."
+                    ))
+                    
+                    for i in range(repeat_count):
+                        if not self.is_running:
+                            break
+                        self.root.after(0, lambda b=block, idx=i+1, r=repeat_count: self.status_label.config(
+                            text=f"🔄 Блок #{b.id}: итерация {idx}/{r}"
+                        ))
+                        
+                        # Выполняем следующие блоки
+                        for next_block in block.connections_out:
+                            if not self.is_running:
+                                break
+                            execute_block(next_block, context.copy())
+                
+                elif isinstance(block, GroupBlock):
+                    # Блок группы - просто пропуск, группа это визуальный маркер
+                    group_type = block.data['group_type']
+                    group_name = block.data['name']
+                    self.root.after(0, lambda b=block, t=group_type, n=group_name: self.status_label.config(
+                        text=f"📦 Блок #{b.id}: {'Начало' if t == 'start' else 'Конец'} группы '{n}'"
+                    ))
+                    
+                    # Выполняем следующие блоки
+                    for next_block in block.connections_out:
+                        if not self.is_running:
+                            break
+                        execute_block(next_block, context.copy())
+                
+                elif isinstance(block, KeyboardInputBlock):
+                    # Блок ввода текста с клавиатуры
+                    text = block.data['text']
+                    press_enter = block.data['press_enter']
+                    
+                    self.root.after(0, lambda b=block, t=text: self.status_label.config(
+                        text=f"⌨️ Блок #{b.id}: ввод текста '{t[:20]}...'"
+                    ))
+                    
+                    # Простой метод - через буфер обмена (работает с любым языком)
+                    try:
+                        import pyperclip
+                        pyperclip.copy(text)
+                        time.sleep(0.15)
+                        pyautogui.hotkey('ctrl', 'v')
+                        time.sleep(0.2)
+                    except Exception as e:
+                        # Fallback - вводим посимвольно
+                        self.root.after(0, lambda: messagebox.showwarning(
+                            "Предупреждение",
+                            f"Ошибка буфера обмена: {str(e)}\nИспользую посимвольный ввод"
+                        ))
+                        for char in text:
+                            pyautogui.write(char, interval=0.05)
+                    
+                    # Нажимаем Enter если нужно
+                    if press_enter:
+                        time.sleep(0.2)
+                        pyautogui.press('enter')
+                    
+                    time.sleep(0.3)
+                    
+                    # Выполняем следующие блоки с задержкой
+                    for next_block in block.connections_out:
+                        if not self.is_running:
+                            break
+                        delay = get_connection_delay(block, next_block)
+                        if delay > 0:
+                            time.sleep(delay)
+                        execute_block(next_block, context.copy())
+            
+            # Запускаем выполнение от каждого начального блока ОДИН РАЗ
+            for start_block in start_blocks:
+                if not self.is_running:
+                    break
+                execute_block(start_block)
+            
+            # Завершаем выполнение
+            self.root.after(0, self.stop_execution)
+            self.root.after(0, lambda: self.status_label.config(text="✅ Выполнение завершено!"))
+        
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror("Ошибка", f"Ошибка выполнения: {str(e)}"))
+            self.root.after(0, self.stop_execution)
+    
+    def save_flow(self):
+        """Сохранение потока"""
+        data = {
+            'blocks': [],
+            'connections': []
         }
+        
+        # Сохраняем блоки
+        for block in self.blocks:
+            block_data = {
+                'id': block.id,
+                'type': block.type,
+                'x': block.x,
+                'y': block.y,
+                'data': block.data
+            }
+            data['blocks'].append(block_data)
+        
+        # Сохраняем соединения
+        for conn in self.connections:
+            conn_data = {
+                'from': conn.from_block.id,
+                'to': conn.to_block.id,
+                'delay': conn.delay
+            }
+            data['connections'].append(conn_data)
         
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(settings, f, indent=4, ensure_ascii=False)
-            
-            chain_count = len(self.action_chain)
-            chain_info = f"\n🔗 Цепочка: {chain_count} действий" if chain_count > 0 else "\n🔗 Цепочка: пусто"
-            
-            messagebox.showinfo(
-                "Успех",
-                f"✅ Настройки сохранены!\n\n"
-                f"📁 Файл: {self.config_file}{chain_info}"
-            )
+                json.dump(data, f, indent=4, ensure_ascii=False)
+            messagebox.showinfo("Успех", f"✅ Поток сохранен!\n\n📁 {self.config_file}\n📦 Блоков: {len(data['blocks'])}\n🔗 Соединений: {len(data['connections'])}")
         except Exception as e:
-            messagebox.showerror(
-                "Ошибка",
-                f"Не удалось сохранить настройки:\n{str(e)}"
-            )
+            messagebox.showerror("Ошибка", f"Не удалось сохранить: {str(e)}")
     
-    def load_settings(self):
-        """Загрузка настроек из файла при старте"""
+    def load_flow_silent(self):
+        """Тихая загрузка потока при старте"""
         if not os.path.exists(self.config_file):
             return
         
         try:
             with open(self.config_file, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
+                data = json.load(f)
             
-            # Загружаем координаты
-            if settings.get("click_x") is not None and settings.get("click_y") is not None:
-                self.click_x = settings["click_x"]
-                self.click_y = settings["click_y"]
-                self.coord_label.config(
-                    text=f"✅ Координаты: X={self.click_x}, Y={self.click_y}",
-                    fg="#27ae60"
-                )
+            # Очищаем текущий canvas
+            for block in self.blocks:
+                block.delete()
+            for conn in self.connections:
+                conn.delete()
+            self.blocks.clear()
+            self.connections.clear()
             
-            # Загружаем интервал
-            if settings.get("interval"):
-                self.interval_var.set(settings["interval"])
-            
-            # Загружаем тип клика
-            if settings.get("click_type"):
-                self.click_type.set(settings["click_type"])
-            
-            # Загружаем цепочку действий
-            if settings.get("action_chain"):
-                self.action_chain = settings["action_chain"]
-                self.update_chain_display()
-                print(f"Загружена цепочка из {len(self.action_chain)} действий")
+            # Загружаем блоки
+            block_map = {}
+            for block_data in data.get('blocks', []):
+                block_type = block_data['type']
+                x, y = block_data['x'], block_data['y']
+                block_id = block_data['id']
                 
+                if block_type == 'coordinate':
+                    block = CoordinateBlock(self.canvas, x, y, block_id)
+                    if block_data['data'].get('x') is not None:
+                        block.update_coordinates(block_data['data']['x'], block_data['data']['y'])
+                elif block_type == 'click':
+                    click_type = block_data['data'].get('click_type', 'left')
+                    block = ClickBlock(self.canvas, x, y, block_id, click_type)
+                elif block_type == 'delay':
+                    delay = block_data['data'].get('delay', 1.0)
+                    block = DelayBlock(self.canvas, x, y, block_id, delay)
+                elif block_type == 'repeat':
+                    repeat_count = block_data['data'].get('repeat_count', 1)
+                    block = RepeatBlock(self.canvas, x, y, block_id, repeat_count)
+                elif block_type == 'group':
+                    group_type = block_data['data'].get('group_type', 'start')
+                    block = GroupBlock(self.canvas, x, y, block_id, group_type)
+                    if block_data['data'].get('name'):
+                        block.update_name(block_data['data']['name'])
+                elif block_type == 'keyboard_input':
+                    text = block_data['data'].get('text', '')
+                    press_enter = block_data['data'].get('press_enter', True)
+                    block = KeyboardInputBlock(self.canvas, x, y, block_id, text, press_enter)
+                else:
+                    continue
+                
+                self.blocks.append(block)
+                block_map[block_id] = block
+                
+                if block_id >= self.next_block_id:
+                    self.next_block_id = block_id + 1
+            
+            # Загружаем соединения
+            for conn_data in data.get('connections', []):
+                from_block = block_map.get(conn_data['from'])
+                to_block = block_map.get(conn_data['to'])
+                delay = conn_data.get('delay', 0.0)
+                if from_block and to_block:
+                    connection = Connection(self.canvas, from_block, to_block, delay)
+                    self.connections.append(connection)
+                    from_block.connections_out.append(to_block)
+                    to_block.connections_in.append(from_block)
+            
+            print(f"Загружен поток: {len(self.blocks)} блоков, {len(self.connections)} соединений")
         except Exception as e:
-            print(f"Ошибка загрузки настроек: {e}")
+            print(f"Ошибка загрузки потока: {e}")
     
-    def load_settings_manual(self):
-        """Ручная загрузка настроек из файла"""
+    def load_flow(self):
+        """Загрузка потока с сообщением"""
         if not os.path.exists(self.config_file):
-            messagebox.showwarning(
-                "Внимание",
-                f"Файл настроек не найден!\n\n📁 {self.config_file}\n\nСначала сохраните настройки."
-            )
+            messagebox.showwarning("Предупреждение", f"Файл {self.config_file} не найден!")
             return
         
         try:
             with open(self.config_file, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
+                data = json.load(f)
             
-            # Загружаем координаты
-            if settings.get("click_x") is not None and settings.get("click_y") is not None:
-                self.click_x = settings["click_x"]
-                self.click_y = settings["click_y"]
-                self.coord_label.config(
-                    text=f"✅ Координаты: X={self.click_x}, Y={self.click_y}",
-                    fg="#27ae60"
-                )
+            # Очищаем текущий canvas
+            for block in self.blocks:
+                block.delete()
+            for conn in self.connections:
+                conn.delete()
+            self.blocks.clear()
+            self.connections.clear()
             
-            # Загружаем интервал
-            if settings.get("interval"):
-                self.interval_var.set(settings["interval"])
-            
-            # Загружаем тип клика
-            if settings.get("click_type"):
-                self.click_type.set(settings["click_type"])
-            
-            # Загружаем цепочку действий
-            chain_count = 0
-            if settings.get("action_chain"):
-                self.action_chain = settings["action_chain"]
-                chain_count = len(self.action_chain)
-                self.update_chain_display()
-            
-            chain_info = f"\n🔗 Цепочка: {chain_count} действий" if chain_count > 0 else "\n🔗 Цепочка: пусто"
-            
-            messagebox.showinfo(
-                "Успех",
-                f"✅ Настройки загружены!\n\n📁 Файл: {self.config_file}{chain_info}"
-            )
+            # Загружаем блоки
+            block_map = {}
+            for block_data in data.get('blocks', []):
+                block_type = block_data['type']
+                x, y = block_data['x'], block_data['y']
+                block_id = block_data['id']
                 
+                if block_type == 'coordinate':
+                    block = CoordinateBlock(self.canvas, x, y, block_id)
+                    if block_data['data'].get('x') is not None:
+                        block.update_coordinates(block_data['data']['x'], block_data['data']['y'])
+                elif block_type == 'click':
+                    click_type = block_data['data'].get('click_type', 'left')
+                    block = ClickBlock(self.canvas, x, y, block_id, click_type)
+                elif block_type == 'delay':
+                    delay = block_data['data'].get('delay', 1.0)
+                    block = DelayBlock(self.canvas, x, y, block_id, delay)
+                elif block_type == 'repeat':
+                    repeat_count = block_data['data'].get('repeat_count', 1)
+                    block = RepeatBlock(self.canvas, x, y, block_id, repeat_count)
+                elif block_type == 'group':
+                    group_type = block_data['data'].get('group_type', 'start')
+                    block = GroupBlock(self.canvas, x, y, block_id, group_type)
+                    if block_data['data'].get('name'):
+                        block.update_name(block_data['data']['name'])
+                elif block_type == 'keyboard_input':
+                    text = block_data['data'].get('text', '')
+                    press_enter = block_data['data'].get('press_enter', True)
+                    block = KeyboardInputBlock(self.canvas, x, y, block_id, text, press_enter)
+                else:
+                    continue
+                
+                self.blocks.append(block)
+                block_map[block_id] = block
+                
+                if block_id >= self.next_block_id:
+                    self.next_block_id = block_id + 1
+            
+            # Загружаем соединения
+            for conn_data in data.get('connections', []):
+                from_block = block_map.get(conn_data['from'])
+                to_block = block_map.get(conn_data['to'])
+                delay = conn_data.get('delay', 0.0)
+                if from_block and to_block:
+                    connection = Connection(self.canvas, from_block, to_block, delay)
+                    self.connections.append(connection)
+                    from_block.connections_out.append(to_block)
+                    to_block.connections_in.append(from_block)
+            
+            messagebox.showinfo("Успех", f"✅ Поток загружен!\n\n📦 Блоков: {len(self.blocks)}\n🔗 Соединений: {len(self.connections)}")
+            self.status_label.config(text=f"✅ Загружено: {len(self.blocks)} блоков, {len(self.connections)} соединений")
         except Exception as e:
-            messagebox.showerror(
-                "Ошибка",
-                f"Не удалось загрузить настройки:\n{str(e)}"
-            )
+            messagebox.showerror("Ошибка", f"Не удалось загрузить: {str(e)}")
                 
     def on_closing(self):
         """Обработка закрытия окна"""
-        self.is_clicking = False
+        self.is_running = False
         keyboard.unhook_all()
         self.root.destroy()
 
 def main():
     root = tk.Tk()
-    app = AutoClicker(root)
+    app = FlowEditor(root)
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
     root.mainloop()
 
 if __name__ == "__main__":
     main()
-
