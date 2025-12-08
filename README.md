@@ -4,6 +4,8 @@
 
 FlowClick Studio is a powerful visual flow editor that allows you to create automated click sequences and keyboard inputs using a drag-and-drop interface inspired by BPMN (Business Process Model and Notation).
 
+![FlowClick Studio](image.png)
+
 ![FlowClick Studio Interface](Безымянный.png)
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
