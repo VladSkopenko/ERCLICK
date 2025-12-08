@@ -3,8 +3,8 @@
         {
             "id": 19,
             "type": "coordinate",
-            "x": 231,
-            "y": 8,
+            "x": 205,
+            "y": 16,
             "data": {
                 "x": 131,
                 "y": 67
@@ -13,8 +13,8 @@
         {
             "id": 20,
             "type": "click",
-            "x": 343,
-            "y": 15,
+            "x": 330,
+            "y": 18,
             "data": {
                 "click_type": "right"
             }
@@ -22,8 +22,8 @@
         {
             "id": 21,
             "type": "coordinate",
-            "x": 459,
-            "y": 13,
+            "x": 446,
+            "y": 24,
             "data": {
                 "x": 201,
                 "y": 94
@@ -32,8 +32,8 @@
         {
             "id": 22,
             "type": "click",
-            "x": 641,
-            "y": 7,
+            "x": 658,
+            "y": 29,
             "data": {
                 "click_type": "left"
             }
@@ -41,8 +41,8 @@
         {
             "id": 26,
             "type": "coordinate",
-            "x": 795,
-            "y": 7,
+            "x": 804,
+            "y": 29,
             "data": {
                 "x": 562,
                 "y": 310
@@ -51,8 +51,8 @@
         {
             "id": 27,
             "type": "click",
-            "x": 977,
-            "y": 5,
+            "x": 974,
+            "y": 29,
             "data": {
                 "click_type": "left"
             }
@@ -60,18 +60,18 @@
         {
             "id": 28,
             "type": "keyboard_input",
-            "x": 976,
-            "y": 171,
+            "x": 973,
+            "y": 183,
             "data": {
-                "text": "Skopenko Vladyslav",
+                "text": "Tekra",
                 "press_enter": true
             }
         },
         {
             "id": 29,
             "type": "coordinate",
-            "x": 781,
-            "y": 175,
+            "x": 802,
+            "y": 184,
             "data": {
                 "x": 682,
                 "y": 713
@@ -80,8 +80,8 @@
         {
             "id": 30,
             "type": "click",
-            "x": 583,
-            "y": 168,
+            "x": 600,
+            "y": 171,
             "data": {
                 "click_type": "left"
             }
@@ -89,7 +89,7 @@
         {
             "id": 31,
             "type": "coordinate",
-            "x": 412,
+            "x": 431,
             "y": 169,
             "data": {
                 "x": 1798,
@@ -99,8 +99,8 @@
         {
             "id": 32,
             "type": "click",
-            "x": 397,
-            "y": 345,
+            "x": 430,
+            "y": 354,
             "data": {
                 "click_type": "left"
             }
@@ -118,8 +118,8 @@
         {
             "id": 34,
             "type": "group",
-            "x": 602,
-            "y": 348,
+            "x": 608,
+            "y": 333,
             "data": {
                 "group_type": "end",
                 "name": "Группа"
@@ -128,8 +128,8 @@
         {
             "id": 35,
             "type": "repeat",
-            "x": 143,
-            "y": 512,
+            "x": 42,
+            "y": 362,
             "data": {
                 "repeat_count": 2
             }

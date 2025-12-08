@@ -205,6 +205,7 @@ class Connection:
         self.line_id = None
         self.arrow_id = None
         self.text_id = None
+        self.delay_circle_id = None  # ID желтого круга с задержкой
         self.draw()
     
     def draw(self):
@@ -243,7 +244,7 @@ class Connection:
             mid_y = (y1 + y2) // 2
             
             # Фон для текста
-            self.canvas.create_oval(
+            self.delay_circle_id = self.canvas.create_oval(
                 mid_x - 15, mid_y - 15,
                 mid_x + 15, mid_y + 15,
                 fill="#ff9800",
@@ -267,6 +268,8 @@ class Connection:
             self.canvas.delete(self.line_id)
         if self.text_id:
             self.canvas.delete(self.text_id)
+        if self.delay_circle_id:
+            self.canvas.delete(self.delay_circle_id)
         self.draw()
     
     def delete(self):
@@ -275,6 +278,8 @@ class Connection:
             self.canvas.delete(self.line_id)
         if self.text_id:
             self.canvas.delete(self.text_id)
+        if self.delay_circle_id:
+            self.canvas.delete(self.delay_circle_id)
     
     def contains_point(self, x, y, tolerance=10):
         """Проверка попадания точки на линию"""
@@ -662,6 +667,9 @@ class FlowEditor:
         self.batch_coordinate_mode = False
         self.batch_coord_blocks = []
         self.batch_coord_index = 0
+        self.current_code = "" 
+        self.current_edited_block = None
+        self.current_edited_connection = None  # Текущее редактируемое соединение
         
         # Настройка pyautogui
         pyautogui.FAILSAFE = True
@@ -931,9 +939,26 @@ class FlowEditor:
             relief="flat"
         ).grid(row=0, column=9, padx=5)
         
-        # Основной Canvas
-        canvas_frame = tk.Frame(self.root, bg="#ffffff", relief="solid", bd=2)
-        canvas_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        tk.Button(
+            row2,
+            text="🐍 Экспорт в Python",
+            command=self.export_to_python,
+            bg="#f39c12",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).grid(row=0, column=10, padx=5)
+        
+        # Основной контейнер для Canvas и правой панели
+        main_container = tk.Frame(self.root, bg="#2c3e50")
+        main_container.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Canvas слева
+        canvas_frame = tk.Frame(main_container, bg="#ffffff", relief="solid", bd=2)
+        canvas_frame.pack(side="left", fill="both", expand=True, padx=(0, 5))
         
         self.canvas = Canvas(
             canvas_frame,
@@ -941,6 +966,87 @@ class FlowEditor:
             highlightthickness=0
         )
         self.canvas.pack(fill="both", expand=True)
+        
+        # Правая панель для кода
+        self.code_panel_frame = tk.Frame(main_container, bg="#2c3e50", width=400, relief="solid", bd=2)
+        self.code_panel_frame.pack(side="right", fill="both", padx=(5, 0))
+        self.code_panel_frame.pack_propagate(False)
+        
+        # Заголовок панели кода
+        code_header = tk.Frame(self.code_panel_frame, bg="#34495e", height=40)
+        code_header.pack(fill="x")
+        code_header.pack_propagate(False)
+        
+        tk.Label(
+            code_header,
+            text="🐍 Python код блока",
+            font=("Segoe UI", 10, "bold"),
+            fg="white",
+            bg="#34495e"
+        ).pack(pady=10)
+        
+        # Текстовое поле для кода
+        code_text_frame = tk.Frame(self.code_panel_frame, bg="#1e1e1e")
+        code_text_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Скроллбар
+        code_scrollbar = tk.Scrollbar(code_text_frame)
+        code_scrollbar.pack(side="right", fill="y")
+        
+        # Текстовое поле с подсветкой синтаксиса (редактируемое!)
+        self.code_text = tk.Text(
+            code_text_frame,
+            font=("Consolas", 9),
+            bg="#1e1e1e",
+            fg="#d4d4d4",
+            insertbackground="white",
+            selectbackground="#264f78",
+            wrap="word",
+            yscrollcommand=code_scrollbar.set,
+            padx=10,
+            pady=10
+        )
+        self.code_text.pack(side="left", fill="both", expand=True)
+        code_scrollbar.config(command=self.code_text.yview)
+        
+        # Начальное сообщение
+        self.code_text.insert("1.0", "# Выберите блок, чтобы увидеть его Python код\n# Select a block to see its Python code")
+        
+        # Кнопки управления кодом
+        button_frame = tk.Frame(self.code_panel_frame, bg="#34495e", height=80)
+        button_frame.pack(fill="x")
+        button_frame.pack_propagate(False)
+        
+        tk.Button(
+            button_frame,
+            text="✅ Применить изменения",
+            command=self.apply_code_changes,
+            bg="#e67e22",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).pack(pady=5)
+        
+        # Кнопка копирования кода
+        copy_btn_frame = tk.Frame(self.code_panel_frame, bg="#34495e", height=40)
+        copy_btn_frame.pack(fill="x")
+        copy_btn_frame.pack_propagate(False)
+        
+        tk.Button(
+            copy_btn_frame,
+            text="📋 Копировать код",
+            command=self.copy_code_to_clipboard,
+            bg="#27ae60",
+            fg="white",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+            padx=10,
+            pady=5,
+            relief="flat"
+        ).pack(pady=5)
         
         # Сетка на canvas
         self.draw_grid()
@@ -1241,11 +1347,114 @@ class FlowEditor:
         clicked_block = self.get_block_at_position(event.x, event.y)
         
         if clicked_block and isinstance(clicked_block, CoordinateBlock):
-            # Получаем текущие координаты мыши
-            x, y = pyautogui.position()
-            clicked_block.update_coordinates(x, y)
-            self.selected_block = clicked_block
-            self.status_label.config(text=f"✅ Двойной клик! Координаты: X={x}, Y={y} для блока #{clicked_block.id}")
+            # Диалог с выбором: автозахват или ручной ввод
+            dialog = tk.Toplevel(self.root)
+            dialog.title(f"Редактировать координаты #{clicked_block.id}")
+            dialog.geometry("400x250")
+            dialog.configure(bg="#ecf0f1")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            tk.Label(
+                dialog,
+                text="Способ установки координат:",
+                font=("Segoe UI", 12, "bold"),
+                bg="#ecf0f1"
+            ).pack(pady=15)
+            
+            # Кнопка автозахвата
+            def auto_capture():
+                x, y = pyautogui.position()
+                clicked_block.update_coordinates(x, y)
+                self.selected_block = clicked_block
+                self.status_label.config(text=f"✅ Автозахват! Координаты: X={x}, Y={y} для блока #{clicked_block.id}")
+                # Обновляем панель кода
+                self.update_code_panel(clicked_block)
+                dialog.destroy()
+            
+            tk.Button(
+                dialog,
+                text="📍 Автозахват (текущая позиция мыши)",
+                command=auto_capture,
+                bg="#3498db",
+                fg="white",
+                font=("Segoe UI", 10, "bold"),
+                cursor="hand2",
+                padx=20,
+                pady=10
+            ).pack(pady=5)
+            
+            # Разделитель
+            tk.Label(
+                dialog,
+                text="или введите вручную:",
+                font=("Segoe UI", 9),
+                bg="#ecf0f1",
+                fg="#7f8c8d"
+            ).pack(pady=5)
+            
+            # Фрейм для ручного ввода
+            manual_frame = tk.Frame(dialog, bg="#ecf0f1")
+            manual_frame.pack(pady=10)
+            
+            current_x = clicked_block.data.get('x', 0)
+            current_y = clicked_block.data.get('y', 0)
+            
+            tk.Label(
+                manual_frame,
+                text="X:",
+                font=("Segoe UI", 10, "bold"),
+                bg="#ecf0f1"
+            ).grid(row=0, column=0, padx=5)
+            
+            x_var = tk.IntVar(value=current_x if current_x is not None else 0)
+            x_entry = tk.Spinbox(
+                manual_frame,
+                from_=0,
+                to=5000,
+                textvariable=x_var,
+                width=10,
+                font=("Segoe UI", 10)
+            )
+            x_entry.grid(row=0, column=1, padx=5)
+            
+            tk.Label(
+                manual_frame,
+                text="Y:",
+                font=("Segoe UI", 10, "bold"),
+                bg="#ecf0f1"
+            ).grid(row=0, column=2, padx=5)
+            
+            y_var = tk.IntVar(value=current_y if current_y is not None else 0)
+            y_entry = tk.Spinbox(
+                manual_frame,
+                from_=0,
+                to=5000,
+                textvariable=y_var,
+                width=10,
+                font=("Segoe UI", 10)
+            )
+            y_entry.grid(row=0, column=3, padx=5)
+            
+            def manual_ok():
+                clicked_block.update_coordinates(x_var.get(), y_var.get())
+                self.selected_block = clicked_block
+                self.status_label.config(text=f"✅ Координаты установлены: X={x_var.get()}, Y={y_var.get()} для блока #{clicked_block.id}")
+                # Обновляем панель кода
+                self.update_code_panel(clicked_block)
+                dialog.destroy()
+            
+            tk.Button(
+                dialog,
+                text="✅ Сохранить",
+                command=manual_ok,
+                bg="#27ae60",
+                fg="white",
+                font=("Segoe UI", 10, "bold"),
+                cursor="hand2",
+                padx=20,
+                pady=5
+            ).pack(pady=10)
         
         elif clicked_block and isinstance(clicked_block, RepeatBlock):
             # Редактирование количества повторов
@@ -1279,6 +1488,8 @@ class FlowEditor:
             def on_ok():
                 clicked_block.update_repeat_count(repeat_var.get())
                 self.status_label.config(text=f"✅ Блок #{clicked_block.id} обновлен: {repeat_var.get()} повторов")
+                # Обновляем панель кода
+                self.update_code_panel(clicked_block)
                 dialog.destroy()
             
             tk.Button(
@@ -1326,6 +1537,8 @@ class FlowEditor:
             def on_ok():
                 clicked_block.update_delay(delay_var.get())
                 self.status_label.config(text=f"✅ Блок #{clicked_block.id} обновлен: {delay_var.get()} сек")
+                # Обновляем панель кода
+                self.update_code_panel(clicked_block)
                 dialog.destroy()
             
             tk.Button(
@@ -1370,6 +1583,8 @@ class FlowEditor:
             def on_ok():
                 clicked_block.update_name(name_var.get())
                 self.status_label.config(text=f"✅ Группа #{clicked_block.id} переименована: {name_var.get()}")
+                # Обновляем панель кода
+                self.update_code_panel(clicked_block)
                 dialog.destroy()
             
             tk.Button(
@@ -1388,7 +1603,7 @@ class FlowEditor:
             # Редактирование текста для ввода
             dialog = tk.Toplevel(self.root)
             dialog.title(f"Редактировать блок #{clicked_block.id}")
-            dialog.geometry("400x200")
+            dialog.geometry("500x300")
             dialog.configure(bg="#ecf0f1")
             dialog.transient(self.root)
             dialog.grab_set()
@@ -1400,30 +1615,44 @@ class FlowEditor:
                 bg="#ecf0f1"
             ).pack(pady=10)
             
-            text_var = tk.StringVar(value=clicked_block.data['text'])
-            entry = tk.Entry(
-                dialog,
-                textvariable=text_var,
-                width=35,
-                font=("Segoe UI", 11)
+            # Используем Text виджет для многострочного ввода
+            text_frame = tk.Frame(dialog, bg="#ecf0f1")
+            text_frame.pack(pady=5, padx=20, fill="both", expand=True)
+            
+            text_scrollbar = tk.Scrollbar(text_frame)
+            text_scrollbar.pack(side="right", fill="y")
+            
+            text_widget = tk.Text(
+                text_frame,
+                width=50,
+                height=8,
+                font=("Segoe UI", 10),
+                wrap="word",
+                yscrollcommand=text_scrollbar.set
             )
-            entry.pack(pady=10)
-            entry.select_range(0, tk.END)
-            entry.focus()
+            text_widget.pack(side="left", fill="both", expand=True)
+            text_scrollbar.config(command=text_widget.yview)
+            
+            # Вставляем текущий текст
+            text_widget.insert("1.0", clicked_block.data['text'])
+            text_widget.focus()
             
             # Checkbox для нажатия Enter
             enter_var = tk.BooleanVar(value=clicked_block.data['press_enter'])
             tk.Checkbutton(
                 dialog,
-                text="Нажать Enter после ввода",
+                text="✅ Нажать Enter после ввода",
                 variable=enter_var,
                 font=("Segoe UI", 10),
                 bg="#ecf0f1"
             ).pack(pady=10)
             
             def on_ok():
-                clicked_block.update_text(text_var.get(), enter_var.get())
+                new_text = text_widget.get("1.0", "end-1c")  # Получаем весь текст
+                clicked_block.update_text(new_text, enter_var.get())
                 self.status_label.config(text=f"✅ Блок #{clicked_block.id} обновлен")
+                # Обновляем панель кода
+                self.update_code_panel(clicked_block)
                 dialog.destroy()
             
             tk.Button(
@@ -1563,6 +1792,13 @@ class FlowEditor:
                     self.connect_btn.config(bg="#9b59b6", text="🔗 Соединить")
             return
         
+
+        clicked_connection = self.get_connection_at_position(event.x, event.y)
+        if clicked_connection:
+            self.update_code_panel_connection(clicked_connection)
+            self.status_label.config(text=f"🔗 Выбрано соединение: #{clicked_connection.from_block.id} → #{clicked_connection.to_block.id}")
+            return
+        
         # Обычный режим - выбор блока
         clicked_block = self.get_block_at_position(event.x, event.y)
         if clicked_block:
@@ -1573,6 +1809,8 @@ class FlowEditor:
             
             block_type = "Координата" if isinstance(clicked_block, CoordinateBlock) else "Клик"
             self.status_label.config(text=f"📌 Выбран блок #{clicked_block.id} ({block_type})")
+            
+            self.update_code_panel(clicked_block)
         else:
             self.selected_block = None
     
@@ -2048,6 +2286,525 @@ class FlowEditor:
             self.status_label.config(text=f"✅ Загружено: {len(self.blocks)} блоков, {len(self.connections)} соединений")
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось загрузить: {str(e)}")
+    
+    def export_to_python(self):
+        """Экспорт потока в Python скрипт"""
+        if not self.blocks:
+            messagebox.showwarning("Предупреждение", "Нет блоков для экспорта!")
+            return
+        
+        # Находим начальные блоки (без входящих соединений)
+        start_blocks = [block for block in self.blocks if not block.connections_in]
+        
+        if not start_blocks:
+            messagebox.showwarning("Предупреждение", "Не найдено начальных блоков!\n\nДобавьте хотя бы один блок без входящих соединений.")
+            return
+        
+        # Генерируем Python код
+        script_lines = []
+        
+        # Заголовок
+        script_lines.append('#!/usr/bin/env python3')
+        script_lines.append('# -*- coding: utf-8 -*-')
+        script_lines.append('"""')
+        script_lines.append('Автоматически сгенерированный скрипт из FlowClick Studio')
+        script_lines.append('Для запуска: python <имя_файла>.py')
+        script_lines.append('"""')
+        script_lines.append('')
+        
+        # Импорты
+        script_lines.append('import pyautogui')
+        script_lines.append('import time')
+        script_lines.append('import sys')
+        
+        # Проверяем нужен ли pyperclip
+        has_keyboard_input = any(isinstance(b, KeyboardInputBlock) for b in self.blocks)
+        if has_keyboard_input:
+            script_lines.append('try:')
+            script_lines.append('    import pyperclip')
+            script_lines.append('except ImportError:')
+            script_lines.append('    print("Ошибка: установите pyperclip (pip install pyperclip)")')
+            script_lines.append('    sys.exit(1)')
+        
+        script_lines.append('')
+        script_lines.append('def main():')
+        script_lines.append('    """Основная функция выполнения скрипта"""')
+        script_lines.append('    print("🚀 Запуск автоматизации...")')
+        script_lines.append('    print("⏱️  Ожидание 2 секунды перед началом...")')
+        script_lines.append('    time.sleep(2)')
+        script_lines.append('    print("▶ Начало выполнения!\\n")')
+        script_lines.append('')
+        
+        # Генерируем функции для каждого блока
+        visited = set()
+        block_counter = {'count': 0}
+        
+        def generate_block_code(block, indent=1, context=None):
+            """Рекурсивная генерация кода для блока и его потомков"""
+            if context is None:
+                context = {'coordinates': None}
+            
+            if block.id in visited:
+                return []
+            
+            visited.add(block.id)
+            lines = []
+            ind = '    ' * indent
+            
+            if isinstance(block, CoordinateBlock):
+                x, y = block.data.get('x'), block.data.get('y')
+                if x is None or y is None:
+                    lines.append(f'{ind}print("⚠️  Блок #{block.id}: координаты не заданы, пропускаю...")')
+                else:
+                    context['coordinates'] = (x, y)
+                    lines.append(f'{ind}# Блок #{block.id}: Координаты')
+                    lines.append(f'{ind}coord_x, coord_y = {x}, {y}')
+                    lines.append(f'{ind}print(f"📍 Координаты установлены: ({{coord_x}}, {{coord_y}})")')
+            
+            elif isinstance(block, ClickBlock):
+                click_type = block.data['click_type']
+                click_name = {'left': 'Левый', 'right': 'Правый', 'middle': 'Средний'}.get(click_type, click_type)
+                
+                lines.append(f'{ind}# Блок #{block.id}: {click_name} клик')
+                if context.get('coordinates'):
+                    lines.append(f'{ind}print(f"🖱️  {click_name} клик в ({{coord_x}}, {{coord_y}})")')
+                    lines.append(f'{ind}pyautogui.click(coord_x, coord_y, button="{click_type}")')
+                else:
+                    lines.append(f'{ind}print("⚠️  Нет координат для клика, пропускаю...")')
+                lines.append(f'{ind}time.sleep(0.3)')
+            
+            elif isinstance(block, DelayBlock):
+                delay = block.data['delay']
+                lines.append(f'{ind}# Блок #{block.id}: Задержка')
+                lines.append(f'{ind}print(f"⏱️  Задержка {delay} сек...")')
+                lines.append(f'{ind}time.sleep({delay})')
+            
+            elif isinstance(block, RepeatBlock):
+                repeat_count = block.data['repeat_count']
+                lines.append(f'{ind}# Блок #{block.id}: Повторение {repeat_count}x')
+                lines.append(f'{ind}print(f"🔄 Повторение {repeat_count} раз...")')
+                lines.append(f'{ind}for iteration in range({repeat_count}):')
+                lines.append(f'{ind}    print(f"  → Итерация {{iteration + 1}}/{repeat_count}")')
+                
+                # Обрабатываем потомков внутри цикла
+                for next_block in block.connections_out:
+                    child_lines = generate_block_code(next_block, indent + 1, context.copy())
+                    lines.extend(child_lines)
+                
+                return lines  # Возвращаем сразу, потомки уже обработаны
+            
+            elif isinstance(block, GroupBlock):
+                group_type = block.data['group_type']
+                group_name = block.data.get('name', 'Группа')
+                marker = 'Начало' if group_type == 'start' else 'Конец'
+                lines.append(f'{ind}# Блок #{block.id}: {marker} группы "{group_name}"')
+                lines.append(f'{ind}print("📦 {marker} группы: {group_name}")')
+            
+            elif isinstance(block, KeyboardInputBlock):
+                text = block.data.get('text', '')
+                press_enter = block.data.get('press_enter', True)
+                # Экранируем кавычки и переносы строк
+                text_escaped = text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+                lines.append(f'{ind}# Блок #{block.id}: Ввод текста')
+                lines.append(f'{ind}text_to_type = "{text_escaped}"')
+                lines.append(f'{ind}print(f"⌨️  Ввод текста: {{text_to_type[:30]}}...")')
+                lines.append(f'{ind}try:')
+                lines.append(f'{ind}    pyperclip.copy(text_to_type)')
+                lines.append(f'{ind}    time.sleep(0.15)')
+                lines.append(f'{ind}    pyautogui.hotkey("ctrl", "v")')
+                lines.append(f'{ind}    time.sleep(0.2)')
+                lines.append(f'{ind}except Exception as e:')
+                lines.append(f'{ind}    print(f"⚠️  Ошибка буфера обмена: {{e}}")')
+                lines.append(f'{ind}    for char in text_to_type:')
+                lines.append(f'{ind}        pyautogui.write(char, interval=0.05)')
+                
+                if press_enter:
+                    lines.append(f'{ind}time.sleep(0.2)')
+                    lines.append(f'{ind}pyautogui.press("enter")')
+                
+                lines.append(f'{ind}time.sleep(0.3)')
+            
+            # Обрабатываем потомков (если не RepeatBlock, он обработан выше)
+            if not isinstance(block, RepeatBlock):
+                for next_block in block.connections_out:
+                    # Проверяем задержку на соединении
+                    delay_on_connection = 0.0
+                    for conn in self.connections:
+                        if conn.from_block == block and conn.to_block == next_block:
+                            delay_on_connection = conn.delay
+                            break
+                    
+                    if delay_on_connection > 0:
+                        lines.append(f'{ind}# Задержка на переходе')
+                        lines.append(f'{ind}time.sleep({delay_on_connection})')
+                    
+                    child_lines = generate_block_code(next_block, indent, context.copy())
+                    lines.extend(child_lines)
+            
+            return lines
+        
+        # Генерируем код для всех начальных блоков
+        for start_block in start_blocks:
+            code_lines = generate_block_code(start_block, indent=1)
+            script_lines.extend(code_lines)
+            script_lines.append('')
+        
+        script_lines.append('    print("\\n✅ Выполнение завершено!")')
+        script_lines.append('')
+        script_lines.append('if __name__ == "__main__":')
+        script_lines.append('    try:')
+        script_lines.append('        main()')
+        script_lines.append('    except KeyboardInterrupt:')
+        script_lines.append('        print("\\n⏹️  Прервано пользователем")')
+        script_lines.append('        sys.exit(0)')
+        script_lines.append('    except Exception as e:')
+        script_lines.append('        print(f"\\n❌ Ошибка: {e}")')
+        script_lines.append('        sys.exit(1)')
+        
+        # Объединяем строки
+        script_content = '\n'.join(script_lines)
+        
+        # Сохраняем в файл
+        from tkinter import filedialog
+        default_name = "flow_script.py"
+        file_path = filedialog.asksaveasfilename(
+            title="Сохранить Python скрипт",
+            defaultextension=".py",
+            filetypes=[("Python файлы", "*.py"), ("Все файлы", "*.*")],
+            initialfile=default_name
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(script_content)
+                
+                messagebox.showinfo(
+                    "Успех",
+                    f"✅ Скрипт успешно экспортирован!\n\n"
+                    f"📁 Файл: {file_path}\n"
+                    f"📦 Блоков экспортировано: {len(visited)}\n\n"
+                    f"Для запуска:\n"
+                    f'python "{file_path}"'
+                )
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось сохранить скрипт: {str(e)}")
+    
+    def generate_single_block_code(self, block):
+        """Генерация Python кода для одного блока (как в экспорте)"""
+        lines = []
+        
+        # Заголовок с информацией
+        lines.append(f"# ═══════════════════════════════════════════════════")
+        lines.append(f"# Блок #{block.id} - {block.type.upper()}")
+        lines.append(f"# ═══════════════════════════════════════════════════")
+        lines.append("")
+        
+        # Генерируем код точно как в экспорте
+        indent = ""  # Без отступа для просмотра одного блока
+        
+        if isinstance(block, CoordinateBlock):
+            x, y = block.data.get('x'), block.data.get('y')
+            if x is None or y is None:
+                lines.append(f'{indent}# ⚠️  Coordinates not set!')
+            else:
+                lines.append(f'{indent}coord_x, coord_y = {x}, {y}')
+        
+        elif isinstance(block, ClickBlock):
+            click_type = block.data['click_type']
+            
+            lines.append(f'{indent}pyautogui.click(coord_x, coord_y, button="{click_type}")')
+            lines.append(f'{indent}time.sleep(0.3)')
+        
+        elif isinstance(block, DelayBlock):
+            delay = block.data['delay']
+            lines.append(f'{indent}time.sleep({delay})')
+        
+        elif isinstance(block, RepeatBlock):
+            repeat_count = block.data['repeat_count']
+            lines.append(f'{indent}for iteration in range({repeat_count}):')
+            lines.append(f'{indent}    # Next blocks here')
+        
+        elif isinstance(block, GroupBlock):
+            group_type = block.data['group_type']
+            group_name = block.data.get('name', 'Группа')
+            marker = 'start' if group_type == 'start' else 'end'
+            lines.append(f'{indent}# Group {marker}: {group_name}')
+        
+        elif isinstance(block, KeyboardInputBlock):
+            text = block.data.get('text', '')
+            press_enter = block.data.get('press_enter', True)
+            text_escaped = text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+            
+            lines.append(f'{indent}text_to_type = "{text_escaped}"')
+            lines.append(f'{indent}try:')
+            lines.append(f'{indent}    pyperclip.copy(text_to_type)')
+            lines.append(f'{indent}    time.sleep(0.15)')
+            lines.append(f'{indent}    pyautogui.hotkey("ctrl", "v")')
+            lines.append(f'{indent}    time.sleep(0.2)')
+            lines.append(f'{indent}except Exception as e:')
+            lines.append(f'{indent}    for char in text_to_type:')
+            lines.append(f'{indent}        pyautogui.write(char, interval=0.05)')
+            
+            if press_enter:
+                lines.append(f'{indent}time.sleep(0.2)')
+                lines.append(f'{indent}pyautogui.press("enter")')
+            
+            lines.append(f'{indent}time.sleep(0.3)')
+        
+        else:
+            lines.append(f'{indent}# ❓ Неизвестный тип блока')
+        
+        # Информация о соединениях
+        lines.append("")
+        lines.append("# ─────────────────────────────────────────────────")
+        lines.append("# 🔗 Информация о соединениях:")
+        
+        if block.connections_in:
+            lines.append(f"# ← Входящие: {len(block.connections_in)} блок(ов)")
+            for in_block in block.connections_in:
+                lines.append(f"#   • Блок #{in_block.id} ({in_block.type})")
+        else:
+            lines.append("# ← Входящие: нет (начальный блок)")
+        
+        if block.connections_out:
+            lines.append(f"# → Исходящие: {len(block.connections_out)} блок(ов)")
+            for out_block in block.connections_out:
+                delay = 0.0
+                for conn in self.connections:
+                    if conn.from_block == block and conn.to_block == out_block:
+                        delay = conn.delay
+                        break
+                
+                delay_str = f" [⏱️  {delay}s]" if delay > 0 else ""
+                lines.append(f"#   • Блок #{out_block.id} ({out_block.type}){delay_str}")
+        else:
+            lines.append("# → Исходящие: нет (конечный блок)")
+        
+        lines.append("# ═══════════════════════════════════════════════════")
+        
+        return '\n'.join(lines)
+    
+    def generate_connection_code(self, connection):
+        """Генерация Python кода для соединения (задержка)"""
+        lines = []
+        
+        # Заголовок
+        lines.append(f"# ═══════════════════════════════════════════════════")
+        lines.append(f"# СОЕДИНЕНИЕ: Блок #{connection.from_block.id} → Блок #{connection.to_block.id}")
+        lines.append(f"# ═══════════════════════════════════════════════════")
+        lines.append("")
+        
+        if connection.delay > 0:
+            lines.append(f"# Задержка на переходе: {connection.delay} секунд")
+            lines.append(f"time.sleep({connection.delay})")
+        else:
+            lines.append("# Нет задержки на переходе")
+            lines.append("# Чтобы добавить задержку, измените значение:")
+            lines.append("# time.sleep(1.0)")
+        
+        # Информация о соединении
+        lines.append("")
+        lines.append("# ─────────────────────────────────────────────────")
+        lines.append("# 🔗 Информация о соединении:")
+        lines.append(f"# От блока: #{connection.from_block.id} ({connection.from_block.type})")
+        lines.append(f"# К блоку:  #{connection.to_block.id} ({connection.to_block.type})")
+        lines.append("# ═══════════════════════════════════════════════════")
+        
+        return '\n'.join(lines)
+    
+    def update_code_panel(self, block):
+        """Обновление панели с кодом выбранного блока"""
+        if not hasattr(self, 'code_text'):
+            return
+        
+        code = self.generate_single_block_code(block)
+        
+        # Панель теперь редактируема - просто вставляем код
+        self.code_text.delete("1.0", "end")
+        self.code_text.insert("1.0", code)
+        
+        # Сохраняем текущий код и блок для применения изменений
+        self.current_code = code
+        self.current_edited_block = block
+        
+        # Сохраняем текущий код для копирования
+        self.current_code = code
+    
+    def update_code_panel_connection(self, connection):
+        """Обновление панели с кодом выбранного соединения"""
+        if not hasattr(self, 'code_text'):
+            return
+        
+        code = self.generate_connection_code(connection)
+        
+        # Панель редактируема - просто вставляем код
+        self.code_text.delete("1.0", "end")
+        self.code_text.insert("1.0", code)
+        
+        # Сохраняем текущий код и соединение для применения изменений
+        self.current_code = code
+        self.current_edited_connection = connection
+        self.current_edited_block = None  # Очищаем блок
+    
+    def copy_code_to_clipboard(self):
+        """Копирование кода в буфер обмена"""
+        if hasattr(self, 'current_code') and self.current_code:
+            try:
+                import pyperclip
+                pyperclip.copy(self.current_code)
+                self.status_label.config(text="✅ Код скопирован в буфер обмена!")
+                self.root.after(2000, lambda: self.status_label.config(
+                    text="⚫ Готов | Ctrl - выбор координат | Двойной клик на квадрат - захват координат | F6 - запуск | Q - остановка"
+                ))
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось скопировать: {str(e)}")
+        else:
+            messagebox.showwarning("Предупреждение", "Нет кода для копирования!\nВыберите блок сначала.")
+    
+    def apply_code_changes(self):
+        """Применение изменений из кода к блоку или соединению"""
+        # Проверяем что редактируем - блок или соединение
+        if hasattr(self, 'current_edited_connection') and self.current_edited_connection:
+            # Редактируем соединение
+            try:
+                import re
+                edited_code = self.code_text.get("1.0", "end-1c")
+                connection = self.current_edited_connection
+                
+                # Ищем time.sleep(NUMBER)
+                sleep_match = re.search(r'time\.sleep\s*\(\s*([\d.]+)\s*\)', edited_code)
+                if sleep_match:
+                    new_delay = float(sleep_match.group(1))
+                    connection.delay = new_delay
+                    connection.update()
+                    self.status_label.config(text=f"✅ Задержка на соединении обновлена: {new_delay} сек")
+                    # Обновляем панель кода
+                    self.update_code_panel_connection(connection)
+                    messagebox.showinfo("Успех", "✅ Изменения применены к соединению!")
+                else:
+                    messagebox.showwarning("Предупреждение", "Не удалось найти time.sleep() в коде!")
+                return
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось применить изменения:\n{str(e)}")
+                return
+        
+        if not hasattr(self, 'current_edited_block') or not self.current_edited_block:
+            messagebox.showwarning("Предупреждение", "Сначала выберите блок или соединение для редактирования!")
+            return
+        
+        try:
+            # Получаем измененный код из текстового поля
+            edited_code = self.code_text.get("1.0", "end-1c")
+            block = self.current_edited_block
+            
+            # Парсим код в зависимости от типа блока
+            import re
+            
+            if isinstance(block, CoordinateBlock):
+                # Ищем coord_x = NUMBER и coord_y = NUMBER (только строки присваивания)
+                x_match = re.search(r'^\s*coord_x\s*[,=]\s*(\d+)', edited_code, re.MULTILINE)
+                y_match = re.search(r'^\s*coord_y\s*[=]\s*(\d+)', edited_code, re.MULTILINE)
+                
+                # Если не нашли отдельные строки, пробуем формат "coord_x, coord_y = X, Y"
+                if not x_match or not y_match:
+                    pair_match = re.search(r'coord_x\s*,\s*coord_y\s*=\s*(\d+)\s*,\s*(\d+)', edited_code)
+                    if pair_match:
+                        new_x = int(pair_match.group(1))
+                        new_y = int(pair_match.group(2))
+                        block.update_coordinates(new_x, new_y)
+                        self.status_label.config(text=f"✅ Координаты обновлены: X={new_x}, Y={new_y}")
+                        return
+                
+                if x_match and y_match:
+                    new_x = int(x_match.group(1))
+                    new_y = int(y_match.group(1))
+                    block.update_coordinates(new_x, new_y)
+                    self.status_label.config(text=f"✅ Координаты обновлены: X={new_x}, Y={new_y}")
+                else:
+                    messagebox.showwarning("Предупреждение", "Не удалось найти coord_x и coord_y в коде!")
+                    return
+            
+            elif isinstance(block, ClickBlock):
+                # Ищем button="..." для определения типа клика
+                button_match = re.search(r'button\s*=\s*["\'](\w+)["\']', edited_code)
+                if button_match:
+                    new_button = button_match.group(1)
+                    if new_button in ['left', 'right', 'middle']:
+                        block.data['click_type'] = new_button
+                        # Перерисовываем блок
+                        block.delete()
+                        block.__init__(block.canvas, block.x, block.y, block.id, new_button)
+                        # Восстанавливаем соединения
+                        for conn in self.connections:
+                            if conn.from_block == block or conn.to_block == block:
+                                conn.update()
+                        self.status_label.config(text=f"✅ Тип клика изменен на: {new_button}")
+                    else:
+                        messagebox.showwarning("Предупреждение", f"Неверный тип кнопки: {new_button}")
+                        return
+            
+            elif isinstance(block, DelayBlock):
+                # Ищем time.sleep(NUMBER)
+                sleep_match = re.search(r'time\.sleep\s*\(\s*([\d.]+)\s*\)', edited_code)
+                if sleep_match:
+                    new_delay = float(sleep_match.group(1))
+                    block.update_delay(new_delay)
+                    self.status_label.config(text=f"✅ Задержка обновлена: {new_delay} сек")
+                else:
+                    messagebox.showwarning("Предупреждение", "Не удалось найти time.sleep() в коде!")
+                    return
+            
+            elif isinstance(block, RepeatBlock):
+                # Ищем range(NUMBER)
+                range_match = re.search(r'range\s*\(\s*(\d+)\s*\)', edited_code)
+                if range_match:
+                    new_count = int(range_match.group(1))
+                    block.update_repeat_count(new_count)
+                    self.status_label.config(text=f"✅ Количество повторов обновлено: {new_count}")
+                else:
+                    messagebox.showwarning("Предупреждение", "Не удалось найти range() в коде!")
+                    return
+            
+            elif isinstance(block, GroupBlock):
+                # Ищем название группы в комментарии: # Group start/end: НАЗВАНИЕ
+                name_match = re.search(r'#\s*Group\s*(?:start|end):\s*(.+)', edited_code)
+                if name_match:
+                    new_name = name_match.group(1).strip()
+                    block.update_name(new_name)
+                    self.status_label.config(text=f"✅ Название группы обновлено: {new_name}")
+                else:
+                    messagebox.showwarning("Предупреждение", "Не удалось найти название группы в коде!")
+                    return
+            
+            elif isinstance(block, KeyboardInputBlock):
+                # Ищем text_to_type = "..."
+                text_match = re.search(r'text_to_type\s*=\s*["\'](.* ?)["\']', edited_code, re.DOTALL)
+                if text_match:
+                    new_text = text_match.group(1)
+                    # Обрабатываем escape-последовательности
+                    new_text = new_text.replace('\\n', '\n').replace('\\\\', '\\').replace('\\"', '"')
+                    
+                    # Проверяем наличие pyautogui.press("enter")
+                    press_enter = 'pyautogui.press("enter")' in edited_code or "pyautogui.press('enter')" in edited_code
+                    
+                    block.update_text(new_text, press_enter)
+                    self.status_label.config(text=f"✅ Текст обновлен")
+                else:
+                    messagebox.showwarning("Предупреждение", "Не удалось найти text_to_type в коде!")
+                    return
+            
+            else:
+                messagebox.showinfo("Информация", f"Редактирование кода для типа {block.type} пока не поддерживается")
+                return
+            
+            # Обновляем панель кода
+            self.update_code_panel(block)
+            
+            messagebox.showinfo("Успех", "✅ Изменения применены к блоку!")
+            
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось применить изменения:\n{str(e)}")
                 
     def on_closing(self):
         """Обработка закрытия окна"""
